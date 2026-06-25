@@ -22,3 +22,6 @@ debug_result.json
 
 # Temp files
 *.html
+
+# Environment variables (contains credentials — sensitive!)
+.env
