@@ -1,4 +1,2 @@
-camoufox
 playwright
-python-uinput
 python-dotenv

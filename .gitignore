@@ -1,27 +1,36 @@
-# Debug screenshots
+# Environment
+.env
+
+# Data files (contain API keys, credentials)
+qwen_results.json
+qwen_accounts.csv
+xiaomi_results.json
+xiaomi_accounts.csv
+outlook_accounts.json
+results.json
+results*.json
+used_aliases.json
+
+# Screenshots
+screenshots/
 *.png
 
 # Logs
 *.log
 
-# Cache
+# Python
 __pycache__/
 *.pyc
+*.pyo
 
-# Debug scripts (not needed)
-debug_*.py
-test_*.py
-dbg*.py
+# OS
+Thumbs.db
+.DS_Store
 
-# SliderCaptchaSolver repo (third-party)
-SliderCaptchaSolver/
+# Archives
+*.zip
+nopecha-ext/
 
-# Results (contains API keys — sensitive!)
-results.json
-debug_result.json
-
-# Temp files
-*.html
-
-# Environment variables (contains credentials — sensitive!)
-.env
+# Temp/test files
+anchor_response.html
+TASK_STATE.md
