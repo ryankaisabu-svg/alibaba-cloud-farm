@@ -43,6 +43,34 @@ _TOS_MAX_WAIT = 60  # Max seconds a browser will wait for TOS lock (prevent infi
 # Prevent race condition when multiple threads write to same file simultaneously
 _file_lock = threading.Lock()
 
+# ── Async Save Queue ───────────────────────────────────
+# Save results in background thread so browser workers don't block on file I/O
+_save_queue = None  # initialized lazily in _get_save_queue()
+
+def _get_save_queue():
+    """Lazy-init a background thread that processes save requests from a queue."""
+    global _save_queue
+    if _save_queue is None:
+        import queue as _q
+        _save_queue = _q.Queue()
+        def _save_worker():
+            """Background thread: drain save queue and process each result."""
+            while True:
+                try:
+                    result = _save_queue.get()
+                    if result is _SENTINEL:
+                        break  # shutdown signal
+                    _do_save_result(result)
+                    _save_queue.task_done()
+                except Exception as e:
+                    log("ASYNC", f"Save worker error (non-critical): {e}")
+        _t = threading.Thread(target=_save_worker, daemon=True, name="SaveWorker")
+        _t.start()
+        log("SF", "Background save thread started")
+    return _save_queue
+
+_SENTINEL = object()  # unique sentinel for queue shutdown
+
 # ─ Path setup ──────────────────────────────────────
 FARM_DIR = os.path.dirname(os.path.abspath(__file__))
 if FARM_DIR not in sys.path:
@@ -347,43 +375,55 @@ def _sync_master_csv(result):
         log("SYNC", f"Sync error (non-critical): {sync_err}")
 
 
-def save_result(result):
-    """Save a single result, merging with existing data. Never loses old entries.
+def _do_save_result(result):
+    """Actual file I/O for saving a result. Always runs inside _file_lock or on background thread.
 
-    Thread-safe: uses _file_lock to prevent data corruption when multiple
-    browsers finish simultaneously and try to write results.json at the same time.
+    Merges with existing data, writes JSON + CSV + syncs master CSV in a SINGLE lock.
     """
-    with _file_lock:
-        results = load_results()
-
-        existing_emails = {r.get("email", ""): i for i, r in enumerate(results)}
-
-        if result.get("email", "") in existing_emails:
-            idx = existing_emails[result["email"]]
-            old_status = results[idx].get("status", "")
-            new_status = result.get("status", "")
-
-            if old_status == "complete" and new_status != "complete":
-                log("SAVE", f"Keeping existing 'complete' for {result['email']} (not downgrading to {new_status})")
-                return
-
-            results[idx] = result
-            log("SAVE", f"Updated result for {result['email']}: {old_status} -> {new_status}")
-        else:
-            results.append(result)
-            log("SAVE", f"Appended new result for {result['email']}: {result.get('status','?')}")
-
-        save_results(results)
-
-    append_csv(result.get("email", ""), result.get("api_key", ""), result.get("status", "unknown"))
-
-    # Auto-sync master CSV so it always stays up-to-date without manual re-matching
-    # Thread-safe: wrap in _file_lock to prevent race condition with other threads
     try:
         with _file_lock:
+            # ── 1. Save/merge results.json ──
+            results = load_results()
+
+            existing_emails = {r.get("email", ""): i for i, r in enumerate(results)}
+
+            if result.get("email", "") in existing_emails:
+                idx = existing_emails[result["email"]]
+                old_status = results[idx].get("status", "")
+                new_status = result.get("status", "")
+
+                if old_status == "complete" and new_status != "complete":
+                    log("SAVE", f"Keeping existing 'complete' for {result['email']} (not downgrading to {new_status})")
+                    return
+
+                results[idx] = result
+                log("SAVE", f"Updated result for {result['email']}: {old_status} -> {new_status}")
+            else:
+                results.append(result)
+                log("SAVE", f"Appended new result for {result['email']}: {result.get('status','?')}")
+
+            save_results(results)
+
+            # ── 2. Append CSV (inside same lock) ──
+            append_csv(result.get("email", ""), result.get("api_key", ""), result.get("status", "unknown"))
+
+            # ── 3. Sync master CSV (inside same lock) ──
             _sync_master_csv(result)
-    except Exception:
-        pass  # non-critical, don't crash the farm if sync fails
+
+        # ── 4. Mark done (quick append) ──
+        mark_email_done(result["email"])
+    except Exception as e:
+        log("SAVE", f"Error saving result (non-critical): {e}")
+
+
+def save_result(result):
+    """Public API: enqueue result for async background save.
+
+    Returns IMMEDIATELY — does not block the calling browser worker thread.
+    The actual file I/O happens on the SaveWorker background thread.
+    """
+    q = _get_save_queue()
+    q.put(result)
 
 
 def mark_email_done(email):
@@ -907,8 +947,7 @@ def run_single(email_addr, password, browser_idx=0):
                 log(f"A{browser_idx}", "Garbage collected after account batch")
 
     save_result(result)
-    if result["status"] == "complete":
-        mark_email_done(email_addr)
+    # mark_email_done() already called inside save_result() — no need to call again here
     return result
 
 
@@ -1728,10 +1767,19 @@ def main():
         
         # Wait until ALL accounts processed
         account_queue.join()  # wait for queue to drain
-        
+
         # Wait for remaining workers to finish their last task
         for t in threads:
             t.join(timeout=60)
+
+    # ── Flush async save queue before reporting DONE ──
+    # Make sure all background saves have completed
+    if _save_queue is not None:
+        log("SF", "Flushing save queue (waiting for background writes)...")
+        _save_queue.join()  # wait for SaveWorker to finish all pending saves
+        # Send shutdown sentinel (optional, but clean)
+        _save_queue.put(_SENTINEL)
+        time.sleep(0.5)
 
     log("SF", "=" * 55)
     log("SF", f"DONE! Success: {success_count} | Failed: {fail_count} | Total: {len(accounts)}")
