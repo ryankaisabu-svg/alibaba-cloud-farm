@@ -31,14 +31,15 @@ from threading import Lock
 
 # Reuse helpers from farm_headless
 from farm_headless import log
+from data_paths import get_path, mark_alias_used, is_alias_used
 
 # ─ Config ──────────────────────────────────────────
 
 QWEN_SIGNUP_URL = "https://home.qwencloud.com/"
 
-# Results files
-RESULTS_FILE = os.path.join(os.path.dirname(__file__), "qwen_results.json")
-CSV_FILE = os.path.join(os.path.dirname(__file__), "qwen_accounts.csv")
+# Results files (per-tab isolated)
+RESULTS_FILE = get_path("qwen", "results.json")
+CSV_FILE = get_path("qwen", "accounts.csv")
 
 # OTP deduplication — shared across threads to prevent OTP collision
 _used_otps = set()

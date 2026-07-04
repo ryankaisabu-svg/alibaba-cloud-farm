@@ -51,7 +51,8 @@ TEMPMAIL_DOMAINS_XIAOMI = [
 
 def save_result(record):
     """Save result to JSON + CSV (dual backup for safety)."""
-    results_file = os.path.join(os.path.dirname(__file__), "xiaomi_results.json")
+    from data_paths import get_path
+    results_file = get_path("xiaomi", "results.json")
     # 1. Save to JSON
     results = []
     if os.path.exists(results_file):
@@ -66,7 +67,7 @@ def save_result(record):
     log("API", f"Saved to {results_file}")
 
     # 2. Also append to CSV (easy to open in Excel, survives JSON corruption)
-    csv_file = os.path.join(os.path.dirname(results_file), "xiaomi_accounts.csv")
+    csv_file = get_path("xiaomi", "accounts.csv")
     header = "timestamp,email,password,api_key,status,gmail_account\n"
     row = (
         f'"{record.get("timestamp","")}","{record.get("email","")}",'

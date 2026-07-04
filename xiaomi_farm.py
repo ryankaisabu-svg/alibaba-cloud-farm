@@ -45,7 +45,8 @@ except ImportError:
     STEALTH_AVAILABLE = False
 
 # ─ Config ──────────────────────────────────────────
-RESULTS_FILE = os.path.join(os.path.dirname(__file__), "xiaomi_results.json")
+from data_paths import get_path
+RESULTS_FILE = get_path("xiaomi", "results.json")
 
 # Parse CLI flags
 DEBUG = "--debug" in sys.argv

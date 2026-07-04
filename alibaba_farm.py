@@ -324,5 +324,34 @@ def main():
     log("QWEN", "=" * 60)
 
 
+# ── GUI Integration ─────────────────────────────────────────
+def run_qwen_farm(args):
+    """
+    Wrapper function untuk GUI integration.
+    
+    Args:
+        args: Object dengan attributes:
+            - gmail: Gmail address
+            - apppass: Gmail app password
+            - count: Number of accounts
+            - concurrency: Parallel browsers
+            - proxy: HTTP proxy (optional)
+            - show: Show browser (bool)
+            - debug: Debug mode (bool)
+    """
+    global GMAIL_USER, APP_PASS, COUNT, CONCURRENCY, PROXY, HEADLESS
+    
+    # Override globals dengan args dari GUI
+    GMAIL_USER = args.gmail
+    APP_PASS = args.apppass
+    COUNT = args.count
+    CONCURRENCY = args.concurrency
+    PROXY = args.proxy
+    HEADLESS = not args.show
+    
+    # Jalankan farming
+    main()
+
+
 if __name__ == "__main__":
     main()

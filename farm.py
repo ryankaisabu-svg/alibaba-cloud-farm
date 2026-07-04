@@ -3,6 +3,24 @@
 Alibaba Cloud account farm — Camoufox automation with proxy.
 Loop: register → verify email → create API key.
 If slider appears → skip + restart from beginning.
+
+ANTI-CAPTCHA OPTIMIZATIONS:
+  This script implements professional anti-detection measures to minimize CAPTCHA:
+  - User-Agent: Chrome 130+ (latest stable)
+  - Viewport: 1366x768 (standard laptop resolution)
+  - Device Scale Factor: 1 (normal DPI)
+  - Timezone: America/New_York (standard)
+  - Locale: en-US (standard)
+  - Permissions: geolocation, notifications (standard)
+  - playwright-stealth: Applied to mask automation fingerprints
+  - JavaScript anti-detection: Overrides webdriver, plugins, languages, WebGL
+  - WebGL Fingerprint: Spoofed as Intel(R) UHD Graphics 620
+
+  For best results:
+  - Run in visible mode (headless=False) for lowest CAPTCHA rate
+  - Install playwright-stealth: uv pip install playwright-stealth
+  - Use residential proxies if IP is blocked
+  - Use --show flag to see browser activity
 """
 
 import sys
@@ -1153,10 +1171,14 @@ def main():
     mouse = setup_virtual_mouse()
     
     with sync_playwright() as p:
+        # User-Agent terbaru (Chrome 130+)
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+
         browser = p.chromium.launch(headless=False, channel='chrome', args=[
             '--disable-blink-features=AutomationControlled',
             '--no-first-run',
             '--no-default-browser-check',
+            f'--user-agent={user_agent}',
         ])
         
         success_count = 0
@@ -1170,13 +1192,32 @@ def main():
             
             # New context per attempt — prevents TargetClosedError if previous page crashed
             context = browser.new_context(
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
-                viewport={'width': 1280, 'height': 800},
+                user_agent=user_agent,
+                viewport={'width': 1366, 'height': 768},  # Ukuran layar standar
+                device_scale_factor=1,  # Skala perangkat normal
                 locale='en-US',
+                timezone_id='America/New_York',  # Timezone standar
+                permissions=['geolocation', 'notifications'],  # Izin standar
             )
+            
             if STEALTH_AVAILABLE:
                 stealth = Stealth()
                 stealth.apply_stealth_sync(context)
+            
+            # Anti-detection tambahan
+            page = context.new_page()
+            page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+                // Override WebGL fingerprint
+                const getParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                    if (parameter === 37445) return 'Intel(R) UHD Graphics 620';
+                    if (parameter === 37446) return 'Google Inc. (Intel)'; 
+                    return getParameter(parameter);
+                };
+            """)
             
             try:
                 result = register_one_attempt(context)

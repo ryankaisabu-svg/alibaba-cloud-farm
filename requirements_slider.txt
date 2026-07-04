@@ -1,0 +1,27 @@
+# Slider CAPTCHA Solving Dependencies for AlibabaCloud Farm
+# Install with: pip install -r requirements_slider.txt
+
+# Core dependencies (already in your project)
+playwright>=1.40.0
+playwright-stealth
+
+# Slider solving methods (install based on your OS)
+
+# For Windows (RECOMMENDED for best results)
+pyautogui>=0.9.54
+
+# For Windows/Linux (alternative)
+pynput>=1.7.6
+
+# For Linux only (requires uinput kernel module)
+# python-uinput>=0.1.1
+
+# Optional: For better slider detection
+opencv-python>=4.8.0
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Note:
+# - On Windows: Install pyautogui for best results
+# - On Linux: Install python-uinput (requires root/sudo for uinput module)
+# - Playwright mouse actions work on all platforms without additional dependencies

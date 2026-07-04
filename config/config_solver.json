@@ -1,0 +1,7 @@
+{
+    "solver_preference": {
+        "windows_non_headless": ["pyautogui", "playwright", "pynput"],
+        "windows_headless": ["playwright", "2captcha"]
+    },
+    "2captcha_api_key": ""
+}

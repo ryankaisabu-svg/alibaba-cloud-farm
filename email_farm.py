@@ -49,8 +49,9 @@ import requests
 
 # ─ Config ──────────────────────────────────────────
 FARM_DIR = os.path.dirname(os.path.abspath(__file__))
-RESULTS_FILE = os.path.join(FARM_DIR, "email_farm_results.json")
-CSV_FILE = os.path.join(FARM_DIR, "email_farm_accounts.csv")
+from data_paths import get_path, mark_alias_used, is_alias_used
+RESULTS_FILE = get_path("email", "results.json")
+CSV_FILE = get_path("email", "accounts.csv")
 
 # ─ Helpers ─────────────────────────────────────────
 
@@ -204,19 +205,21 @@ def create_guerrillamail_account():
 
 
 def create_gmail_alias(count=1):
-    """Generate Gmail dot-trick aliases (no creation needed)."""
+    """Generate Gmail dot-trick aliases (no creation needed).
+    
+    Uses alias_index.json for O(1) dedup — skips already-used aliases.
+    Marks new aliases as used in the index.
+    """
     GMAIL_USER = os.environ.get("QWEN_GMAIL_USER", "")
     base = GMAIL_USER.split("@")[0]
     domain = GMAIL_USER.split("@")[1]
 
     aliases = set()
-    # Generate unique dot-trick variations
-    positions = list(range(1, len(base)))  # positions where dots can go
+    positions = list(range(1, len(base)))
 
     attempts = 0
     while len(aliases) < count and attempts < count * 10:
         attempts += 1
-        # Random dot placement
         num_dots = random.randint(1, min(len(positions), 5))
         dot_positions = sorted(random.sample(positions, num_dots))
 
@@ -226,7 +229,15 @@ def create_gmail_alias(count=1):
                 alias += "."
             alias += base[i]
 
-        aliases.add(f"{alias}@{domain}")
+        full_alias = f"{alias}@{domain}"
+        
+        # Dedup via alias_index.json (O(1) lookup)
+        if is_alias_used("email", full_alias):
+            continue
+        
+        aliases.add(full_alias)
+        # Mark as used immediately to prevent collision in concurrent runs
+        mark_alias_used("email", full_alias, base_gmail=GMAIL_USER)
 
     log("GMAIL", f"Generated {len(aliases)} aliases from {GMAIL_USER}")
     return list(aliases)

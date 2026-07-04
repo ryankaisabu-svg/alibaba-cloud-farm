@@ -1,36 +1,82 @@
-# Environment
+# ════════════════════════════════════════
+# Environment & Secrets
+# ════════════════════════════════════════
 .env
+.env.*
+!.env.example
 
-# Data files (contain API keys, credentials)
-qwen_results.json
-qwen_accounts.csv
-xiaomi_results.json
-xiaomi_accounts.csv
-outlook_accounts.json
-results.json
-results*.json
-used_aliases.json
+# ════════════════════════════════════════
+# Data directories (ALL contain credentials / API keys)
+# ════════════════════════════════════════
+data/
+data_*/
+_data/
 
-# Screenshots
+# Account files
+gsuite.txt
+accounts.txt
+*accounts*.csv
+*accounts*.txt
+*_results*.json
+*_keys*.csv
+*_keys*.txt
+*.bak*
+*_backup*/
+
+# ════════════════════════════════════════
+# Screenshots & Media
+# ════════════════════════════════════════
 screenshots/
 *.png
+*.jpg
+*.jpeg
+*.gif
 
+# ════════════════════════════════════════
 # Logs
+# ════════════════════════════════════════
 *.log
 
+# ════════════════════════════════════════
 # Python
+# ════════════════════════════════════════
 __pycache__/
 *.pyc
 *.pyo
+.venv/
+venv/
+*.egg-info/
 
+# ════════════════════════════════════════
 # OS
+# ════════════════════════════════════════
 Thumbs.db
 .DS_Store
+desktop.ini
 
-# Archives
-*.zip
-nopecha-ext/
+# ════════════════════════════════════════
+# Node.js (smtp email tooling) — contains SMTP credentials
+# ════════════════════════════════════════
+node_modules/
+npm-debug.log*
+smtp email/
+smtp*/
 
-# Temp/test files
+# ════════════════════════════════════════
+# Temp / test / backup files
+# ════════════════════════════════════════
+_backup*/
+_test*.py
+_temp*/
 anchor_response.html
 TASK_STATE.md
+*.tmp
+*.swp
+*.swo
+
+# ════════════════════════════════════════
+# IDE
+# ════════════════════════════════════════
+.idea/
+.vscode/
+*.sublime-*
