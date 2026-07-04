@@ -944,7 +944,7 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
             for lbl_text, attr_name, color in [
                 ("TOTAL:", "sf_total_lbl", FG_MAIN),
                 ("✅ KEY:", "sf_haskey_lbl", ACCENT_GREEN),
-                ("❌ NO KEY:", "sf_nokey_lbl", ACCENT_RED),
+                ("❌ FAIL:", "sf_nokey_lbl", ACCENT_RED),
                 ("", "sf_pct_lbl", ACCENT_YELLOW),
             ]:
                 if lbl_text:
@@ -954,6 +954,24 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
                              font=("Segoe UI", 10, "bold"), width=(6 if attr_name == "sf_pct_lbl" else 4))
                 l.pack(side=tk.LEFT)
                 setattr(self, attr_name, l)
+
+            # ── Farm Queue row (file vs dedup) ──
+            rowq = tk.Frame(dash, bg=BG_PANEL)
+            rowq.pack(fill=tk.X, pady=(3, 0))
+            tk.Label(rowq, text="📋 Queue:", bg=BG_PANEL, fg=ACCENT,
+                     font=("Segoe UI", 8, "bold")).pack(side=tk.LEFT)
+
+            for lbl_text, attr_name, color in [
+                ("📄 File:", "sf_file_lbl", FG_DIM),
+                ("🔄 Farm:", "sf_queue_lbl", ACCENT_YELLOW),
+                ("✅ Done:", "sf_dup_lbl", ACCENT_GREEN),
+            ]:
+                tk.Label(rowq, text=lbl_text, bg=BG_PANEL, fg=FG_DIM,
+                         font=("Segoe UI", 7)).pack(side=tk.LEFT, padx=(8, 2))
+                ql = tk.Label(rowq, text="-", bg=BG_PANEL, fg=color,
+                              font=("Segoe UI", 9, "bold"), width=4)
+                ql.pack(side=tk.LEFT)
+                setattr(self, attr_name, ql)
 
             # Filter buttons row
             row2 = tk.Frame(dash, bg=BG_PANEL)
@@ -981,20 +999,36 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
         self._refresh_summary()
 
     def _load_results_data(self):
-        """Load results.json and return categorized lists."""
+        """Load results.json + accounts file → return categorized lists.
+
+        Returns:
+            all_data: all records from results.json
+            has_key: records with valid sk- key
+            no_key: records without valid key (failed/pending)
+            file_accounts: emails from the accounts .txt file (for dedup display)
+        """
         from data_paths import get_path
+
+        # ── Load results.json ──
         rf = get_path(self.RESULTS_KEY, "results.json")
-        if not os.path.exists(rf):
-            return [], [], []
-        try:
-            with open(rf, encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception:
-            return [], [], []
+        raw_data = []
+        if os.path.exists(rf):
+            try:
+                with open(rf, encoding="utf-8") as f:
+                    raw_data = json.load(f)
+            except Exception:
+                pass
 
         has_key = []
         no_key = []
-        for r in data:
+        # Deduplicate results by email: keep latest result per email
+        seen = {}
+        for r in reversed(raw_data):
+            email = r.get("email", "").strip()
+            if email and email not in seen:
+                seen[email] = r
+
+        for r in seen.values():
             email = r.get("email", "").strip()
             key = r.get("api_key", "").strip()
             status = r.get("status", "").strip()
@@ -1002,17 +1036,53 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
                 has_key.append(r)
             else:
                 no_key.append(r)
-        return data, has_key, no_key
+
+        all_data = has_key + no_key  # deduped, no duplicates
+
+        # ── Load accounts .txt file for farm queue preview ──
+        file_accounts = []
+        file_path = getattr(self, 'accounts_file_var', None)
+        if file_path:
+            fp = file_path.get().strip()
+            if fp and os.path.isfile(fp):
+                try:
+                    with open(fp, "r", encoding="utf-8", errors="ignore") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line and "|" in line:
+                                em = line.split("|")[0].strip()
+                                if em:
+                                    file_accounts.append(em)
+                except Exception:
+                    pass
+
+        return all_data, has_key, no_key, file_accounts
 
     def _refresh_summary(self):
         """Reload results.json, update summary bar + treeview. Thread-safe via after()."""
         try:
-            data, has_key, no_key = self._load_results_data()
+            result = self._load_results_data()
+            if len(result) == 3:
+                # Fallback: old format (before update) — shouldn't happen but safe
+                data, has_key, no_key = result
+                file_accounts = []
+            else:
+                data, has_key, no_key, file_accounts = result
+
             total = len(data)
             n_key = len(has_key)
             n_nkey = len(no_key)
 
-            # Update summary labels on left panel (stats area)
+            # ── Farm queue analysis (file vs results) ──
+            has_key_emails = {r.get("email", "").strip() for r in has_key}
+            if file_accounts:
+                n_file = len(file_accounts)
+                n_already = sum(1 for em in file_accounts if em in has_key_emails)
+                n_queue = n_file - n_already
+            else:
+                n_file = n_already = n_queue = 0
+
+            # ── Update summary labels on dashboard ──
             if hasattr(self, 'sf_total_lbl'):
                 self.sf_total_lbl.config(text=str(total))
                 self.sf_haskey_lbl.config(text=str(n_key))
@@ -1020,9 +1090,20 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
                 pct = f"{(n_key/total*100):.0f}%" if total else "0%"
                 self.sf_pct_lbl.config(text=pct)
 
+            # ── Update farm queue labels (if exist) ──
+            if hasattr(self, 'sf_file_lbl'):
+                self.sf_file_lbl.config(text=str(n_file))
+            if hasattr(self, 'sf_queue_lbl'):
+                self.sf_queue_lbl.config(text=str(n_queue))
+                # Color: green if 0 (all done), yellow if some, red if error
+                color = ACCENT_GREEN if n_queue == 0 else (ACCENT_YELLOW if n_queue > 0 else ACCENT_RED)
+                self.sf_queue_lbl.config(fg=color)
+            if hasattr(self, 'sf_dup_lbl'):
+                self.sf_dup_lbl.config(text=str(n_already))
+
             # Update treeview based on current filter
             self._populate_tree(data, has_key, no_key)
-        except Exception:
+        except Exception as e:
             pass
 
     def _populate_tree(self, all_data, has_key_list, no_key_list):
