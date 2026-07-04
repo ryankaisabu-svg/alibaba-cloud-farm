@@ -1775,11 +1775,27 @@ def main():
     # ── Flush async save queue before reporting DONE ──
     # Make sure all background saves have completed
     if _save_queue is not None:
-        log("SF", "Flushing save queue (waiting for background writes)...")
-        _save_queue.join()  # wait for SaveWorker to finish all pending saves
+        # Show progress while flushing instead of appearing stuck
+        pending = _save_queue.qsize()
+        log("SF", f"Flushing save queue ({pending} pending)...")
+        last_report = time.time()
+
+        # Poll-based wait with progress reporting every 5 seconds
+        while not _save_queue.empty():
+            elapsed = time.time() - last_report
+            remaining = _save_queue.qsize()
+            if elapsed > 5 or remaining < pending:
+                log("SF", f"  Still saving... {remaining} remaining")
+                last_report = time.time()
+                pending = remaining
+            time.sleep(0.5)
+
+        # Wait for the in-flight task to finish (the one being processed now)
+        _save_queue.join()
+
         # Send shutdown sentinel (optional, but clean)
         _save_queue.put(_SENTINEL)
-        time.sleep(0.5)
+        time.sleep(0.3)
 
     log("SF", "=" * 55)
     log("SF", f"DONE! Success: {success_count} | Failed: {fail_count} | Total: {len(accounts)}")
