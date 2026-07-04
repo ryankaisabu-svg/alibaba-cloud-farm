@@ -277,6 +277,75 @@ def append_csv(email, api_key, status="complete"):
         writer.writerow([count, email, api_key, status, time.strftime("%Y-%m-%d %H:%M:%S")])
 
 
+def _sync_master_csv(result):
+    """Auto-sync a completed result into master_accounts.csv.
+
+    Called after every successful save_result().
+    - Adds/updates email with valid sk- key
+    - Removes row if status changed from complete → failed (rare)
+    - Preserves passwords from existing CSV rows
+    """
+    MASTER_CSV = os.path.join(_DATA_DIR, "master_accounts.csv")
+    try:
+        email = result.get("email", "").strip()
+        api_key = result.get("api_key", "").strip()
+        status = result.get("status", "").strip()
+
+        if not email:
+            return
+
+        is_valid = (status == "complete" and api_key.startswith("sk-")
+                    and len(api_key) > 10)
+
+        # Load current CSV (or start fresh)
+        rows = []
+        pw_map = {}  # preserve known passwords
+        if os.path.isfile(MASTER_CSV):
+            with open(MASTER_CSV, "r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                header = next(reader, None)  # skip header
+                for r in reader:
+                    if len(r) >= 2 and r[1].strip():
+                        em = r[1].strip()
+                        pw = r[2].strip() if len(r) > 2 else "kukunaga123"
+                        key = r[3].strip() if len(r) > 3 else ""
+                        st = r[4].strip() if len(r) > 4 else ""
+                        if em:
+                            pw_map[em] = pw
+                            rows.append({"email": em, "password": pw,
+                                         "api_key": key, "status": st})
+
+        existing_emails = {r["email"] for r in rows}
+
+        if is_valid:
+            new_row = {
+                "email": email,
+                "password": pw_map.get(email, "kukunaga123"),
+                "api_key": api_key,
+                "status": "complete",
+            }
+            if email in existing_emails:
+                rows = [new_row if r["email"] == email else r for r in rows]
+            else:
+                rows.append(new_row)
+        elif email in existing_emails:
+            # Failed result — remove or mark as NO_API_KEY
+            rows = [r for r in rows if r["email"] != email]
+
+        # Re-number + write
+        rows.sort(key=lambda r: r["email"])
+        with open(MASTER_CSV, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["#", "email", "password", "api_key", "status"])
+            for i, r in enumerate(rows, 1):
+                writer.writerow([i, r["email"], r["password"],
+                                 r["api_key"], r["status"]])
+
+        log("SYNC", f"master_accounts.csv synced ({len(rows)} rows)")
+    except Exception as sync_err:
+        log("SYNC", f"Sync error (non-critical): {sync_err}")
+
+
 def save_result(result):
     """Save a single result, merging with existing data. Never loses old entries."""
     results = load_results()
@@ -284,15 +353,13 @@ def save_result(result):
     existing_emails = {r.get("email", ""): i for i, r in enumerate(results)}
     
     if result.get("email", "") in existing_emails:
-        # Update in-place — keep position, replace dict
         idx = existing_emails[result["email"]]
         old_status = results[idx].get("status", "")
         new_status = result.get("status", "")
         
-        # Only upgrade: complete > anything; don't downgrade from complete to NO_API_KEY
         if old_status == "complete" and new_status != "complete":
             log("SAVE", f"Keeping existing 'complete' for {result['email']} (not downgrading to {new_status})")
-            return  # Don't overwrite a successful result
+            return
         
         results[idx] = result
         log("SAVE", f"Updated result for {result['email']}: {old_status} -> {new_status}")
@@ -302,6 +369,9 @@ def save_result(result):
     
     save_results(results)
     append_csv(result.get("email", ""), result.get("api_key", ""), result.get("status", "unknown"))
+    
+    # Auto-sync master CSV so it always stays up-to-date without manual re-matching
+    _sync_master_csv(result)
 
 
 def mark_email_done(email):
