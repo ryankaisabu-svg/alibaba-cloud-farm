@@ -36,7 +36,7 @@ import csv as _csv
 # Only 1 browser clicks TOS at a time to avoid Google rate-limit detection
 _tos_lock = threading.Lock()
 _last_tos_click_time = 0
-_TOS_COOLDOWN_SECONDS = 3  # Minimum seconds between TOS clicks across all browsers
+_TOS_COOLDOWN_SECONDS = 1  # Minimum seconds between TOS clicks (reduced from 3)
 
 # ── File I/O Lock ─────────────────────────────────────
 # Prevent race condition when multiple threads write to same file simultaneously
@@ -637,8 +637,8 @@ def run_single(email_addr, password, browser_idx=0):
                                 log(f"A{browser_idx}", f"TOS click triggered navigation (expected): {str(nav_err)[:60]}")
                             else:
                                 log(f"A{browser_idx}", f"2nd TOS click error: {str(nav_err)[:80]}")
-                            # Wait for navigation to complete
-                            time.sleep(4)
+                            # Wait for navigation to complete (reduced from 4s)
+                            time.sleep(2)
                     
                     # Update global TOS cooldown timestamp
                     _last_tos_click_time = _time.time()
