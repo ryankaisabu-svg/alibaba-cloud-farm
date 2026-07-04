@@ -294,7 +294,7 @@ class HorizontalLayoutMixin:
 
         cols = self.RESULT_COLS
         # Use larger height for tabs with many accounts (SF, WaveSpeed)
-        tv_height = 12 if getattr(self, 'RESULTS_KEY', '') in ('siliconflow', 'wavespeed') else 6
+        tv_height = 8 if getattr(self, 'RESULTS_KEY', '') in ('siliconflow', 'wavespeed') else 6
         self.tree = ttk.Treeview(res_frame, columns=cols, show="headings", height=tv_height)
         for col in cols:
             self.tree.heading(col, text=col.upper())
@@ -773,7 +773,7 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
     FARM_SCRIPT = "siliconflow_farm.py"
     RESULTS_KEY = "siliconflow"
     RESULT_COLS = ("email", "api_key", "status")
-    RESULT_COL_WIDTHS = {"email": 200, "api_key": 220, "status": 100}
+    RESULT_COL_WIDTHS = {"email": 150, "api_key": 160, "status": 70}
 
     def _build_ui(self):
         """Use horizontal layout."""
@@ -782,22 +782,20 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
     def _build_settings(self, settings):
         """GSuite accounts file path input + single account override.
 
-        Layout (uses LabelFrame sections like WaveSpeedTab — no overlap):
-          Row 10: [📁 ACCOUNTS SOURCE] LabelFrame
-            - Accounts File entry + Browse button
-            - Account count label
-          Row 12: [✅ SINGLE ACCOUNT MODE]
-            - Checkbox + Email/Pass fields
+        Compact horizontal layout — everything fits within 400px left panel:
+          - All entries use tight widths
+          - LabelFrame sections with minimal padding
+          - Email/Pass on same line, compact
         """
         # ═══ Section 1: Account Source ═══
-        sec1 = tk.LabelFrame(settings, text=" \U0001f4c1  ACCOUNTS SOURCE ", bg=BG_PANEL,
+        sec1 = tk.LabelFrame(settings, text=" \U0001f4c1 ACCOUNTS ", bg=BG_PANEL,
                               fg=ACCENT, font=("Segoe UI", 8, "bold"),
-                              labelanchor="w", padx=8, pady=5)
-        sec1.grid(row=10, column=0, columnspan=5, sticky="we", pady=(8, 3))
+                              labelanchor="w", padx=6, pady=3)
+        sec1.grid(row=10, column=0, columnspan=5, sticky="we", pady=(5, 2))
 
-        # File path row
+        # File path row — compact
         f_row = tk.Frame(sec1, bg=BG_PANEL)
-        f_row.pack(fill=tk.X, pady=(0, 2))
+        f_row.pack(fill=tk.X, pady=(0, 1))
 
         tk.Label(f_row, text="File:", bg=BG_PANEL, fg=FG_DIM,
                  font=("Segoe UI", 8)).pack(side=tk.LEFT)
@@ -807,54 +805,46 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
                                         "sf_pending.txt")
 
         self.accounts_file_var = tk.StringVar(value=default_accounts)
+        # width=18 ≈ 144px — leaves room for Browse button within 400px
         tk.Entry(f_row, textvariable=self.accounts_file_var, bg=BG_INPUT,
-                 fg=FG_MAIN, width=30, insertbackground=FG_MAIN,
-                 font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(4, 4), fill=tk.X, expand=True)
+                 fg=FG_MAIN, width=18, insertbackground=FG_MAIN,
+                 font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(3, 3), fill=tk.X, expand=True)
 
         tk.Button(f_row, text="Browse...", bg=ACCENT, fg="#1e1e2e",
-                  font=("Segoe UI", 7), relief=tk.FLAT, padx=6, cursor="hand2",
+                  font=("Segoe UI", 7), relief=tk.FLAT, padx=4, cursor="hand2",
                   command=self._browse_accounts).pack(side=tk.LEFT)
 
-        # Account count label
+        # Account count label — compact
         self.account_count_var = tk.StringVar(value="\u23f3 Loading...")
         tk.Label(sec1, textvariable=self.account_count_var, bg=BG_PANEL,
-                 fg=ACCENT_YELLOW, font=("Segoe UI", 8)).pack(anchor="w", pady=(3, 0))
+                 fg=ACCENT_YELLOW, font=("Segoe UI", 7)).pack(anchor="w", pady=(1, 0))
 
-        # ═══ Section 2: Single Account Mode ═══
-        single_frame = tk.LabelFrame(settings, text=" \u2705  SINGLE ACCOUNT MODE ",
+        # ═══ Section 2: Single Account Mode — compact ═══
+        single_frame = tk.LabelFrame(settings, text=" \u2705 SINGLE ",
                                      bg=BG_PANEL, fg=ACCENT,
                                      font=("Segoe UI", 8, "bold"),
-                                     labelanchor="w", padx=8, pady=5)
-        single_frame.grid(row=12, column=0, columnspan=5, sticky="we", pady=(3, 0))
+                                     labelanchor="w", padx=6, pady=3)
+        single_frame.grid(row=12, column=0, columnspan=5, sticky="we", pady=(2, 0))
 
-        # Checkbox row
-        cb_row = tk.Frame(single_frame, bg=BG_PANEL)
-        cb_row.pack(fill=tk.X)
-
-        self.use_single_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(cb_row, text="Override file with single account below:",
+        # Checkbox + fields on SAME row for compactness
+        cb = tk.Checkbutton(single_frame, text="Single account:",
                        variable=self.use_single_var, bg=BG_PANEL, fg=FG_MAIN,
                        selectcolor=BG_INPUT, activebackground=BG_PANEL,
-                       activeforeground=FG_MAIN, font=("Segoe UI", 9),
-                       command=self._on_single_toggle).pack(side=tk.LEFT)
+                       activeforeground=FG_MAIN, font=("Segoe UI", 8),
+                       command=self._on_single_toggle)
+        cb.pack(side=tk.LEFT)
 
-        # Email + Pass row (indented under checkbox)
-        ep_frame = tk.Frame(single_frame, bg=BG_PANEL)
-        ep_frame.pack(fill=tk.X, padx=(20, 0), pady=(4, 0))
-
-        tk.Label(ep_frame, text="Email:", bg=BG_PANEL, fg=FG_DIM,
-                 font=("Segoe UI", 8), width=6, anchor="e").pack(side=tk.LEFT)
         self.single_email_var = tk.StringVar()
-        tk.Entry(ep_frame, textvariable=self.single_email_var, bg=BG_INPUT,
-                 fg=FG_MAIN, width=26, insertbackground=FG_MAIN,
-                 font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(3, 6))
+        tk.Entry(single_frame, textvariable=self.single_email_var, bg=BG_INPUT,
+                 fg=FG_MAIN, width=18, insertbackground=FG_MAIN,
+                 font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(4, 3))
 
-        tk.Label(ep_frame, text="Pass:", bg=BG_PANEL, fg=FG_DIM,
-                 font=("Segoe UI", 8), width=5, anchor="e").pack(side=tk.LEFT)
+        tk.Label(single_frame, text="Pass:", bg=BG_PANEL, fg=FG_DIM,
+                 font=("Segoe UI", 8)).pack(side=tk.LEFT)
         self.single_pass_var = tk.StringVar()
-        tk.Entry(ep_frame, textvariable=self.single_pass_var, bg=BG_INPUT,
-                 fg=FG_MAIN, width=14, insertbackground=FG_MAIN,
-                 font=("Segoe UI", 8), show="\u2022").pack(side=tk.LEFT, padx=(3, 0))
+        tk.Entry(single_frame, textvariable=self.single_pass_var, bg=BG_INPUT,
+                 fg=FG_MAIN, width=12, insertbackground=FG_MAIN,
+                 font=("Segoe UI", 8), show="\u2022").pack(side=tk.LEFT, padx=(2, 0))
 
     def _browse_accounts(self):
         from tkinter import filedialog
