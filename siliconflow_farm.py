@@ -46,6 +46,8 @@ _file_lock = threading.Lock()
 # ── Async Save Queue ───────────────────────────────────
 # Save results in background thread so browser workers don't block on file I/O
 _save_queue = None  # initialized lazily in _get_save_queue()
+_BATCH_SIZE = 10      # flush to disk every N results
+_BATCH_TIMEOUT = 30   # flush to disk every N seconds even if < N results
 
 def _get_save_queue():
     """Lazy-init a background thread that processes save requests from a queue."""
@@ -53,20 +55,82 @@ def _get_save_queue():
     if _save_queue is None:
         import queue as _q
         _save_queue = _q.Queue()
+
+        # In-memory batch buffer — accumulate saves, write once per batch
+        _batch_buffer = []
+        _last_flush_time = _time.time()
+
+        def _flush_batch(buffer_list):
+            """Write all accumulated results to disk in one go."""
+            if not buffer_list:
+                return
+            try:
+                # ── Merge ALL batched results at once into JSON ──
+                existing = load_results()
+                email_map = {r.get("email", ""): i for i, r in enumerate(existing)}
+                for result in buffer_list:
+                    em = result.get("email", "")
+                    if em in email_map:
+                        old_status = existing[email_map[em]].get("status", "")
+                        new_status = result.get("status", "")
+                        if old_status == "complete" and new_status != "complete":
+                            continue  # keep existing success
+                        existing[email_map[em]] = result
+                    else:
+                        existing.append(result)
+                        email_map[em] = len(existing) - 1
+                save_results(existing)
+
+                # ── Append CSV rows ──
+                for result in buffer_list:
+                    append_csv(result.get("email", ""), result.get("api_key", ""),
+                               result.get("status", "unknown"))
+
+                # ── Sync master CSV once for entire batch ──
+                for result in buffer_list:
+                    try:
+                        _sync_master_csv(result)
+                    except Exception:
+                        pass
+
+                # ── Mark all done ──
+                for result in buffer_list:
+                    mark_email_done(result["email"])
+
+                log("BATCH", f"Flushed {len(buffer_list)} results to disk")
+            except Exception as e:
+                log("BATCH", f"Flush error (non-critical): {e}")
+
         def _save_worker():
-            """Background thread: drain save queue and process each result."""
+            """Background thread: drain save queue and batch-flush to disk."""
             while True:
                 try:
                     result = _save_queue.get()
                     if result is _SENTINEL:
-                        break  # shutdown signal
-                    _do_save_result(result)
+                        # Shutdown: flush remaining buffer before exit
+                        _flush_batch(_batch_buffer)
+                        _batch_buffer.clear()
+                        break
+                    _batch_buffer.append(result)
                     _save_queue.task_done()
+
+                    # Flush conditions: batch full OR timeout elapsed
+                    now = _time.time()
+                    should_flush = (
+                        len(_batch_buffer) >= _BATCH_SIZE or
+                        (now - _last_flush_time) >= _BATCH_TIMEOUT
+                    )
+                    if should_flush:
+                        _flush_batch(_batch_buffer)
+                        _batch_buffer.clear()
+                        _last_flush_time = now
+
                 except Exception as e:
                     log("ASYNC", f"Save worker error (non-critical): {e}")
+
         _t = threading.Thread(target=_save_worker, daemon=True, name="SaveWorker")
         _t.start()
-        log("SF", "Background save thread started")
+        log("SF", f"Background save thread started (batch={_BATCH_SIZE}, timeout={_BATCH_TIMEOUT}s)")
     return _save_queue
 
 _SENTINEL = object()  # unique sentinel for queue shutdown
@@ -1773,29 +1837,14 @@ def main():
             t.join(timeout=60)
 
     # ── Flush async save queue before reporting DONE ──
-    # Make sure all background saves have completed
+    # With batch mode, most data is already flushed. Just drain remaining.
     if _save_queue is not None:
-        # Show progress while flushing instead of appearing stuck
         pending = _save_queue.qsize()
-        log("SF", f"Flushing save queue ({pending} pending)...")
-        last_report = time.time()
-
-        # Poll-based wait with progress reporting every 5 seconds
-        while not _save_queue.empty():
-            elapsed = time.time() - last_report
-            remaining = _save_queue.qsize()
-            if elapsed > 5 or remaining < pending:
-                log("SF", f"  Still saving... {remaining} remaining")
-                last_report = time.time()
-                pending = remaining
-            time.sleep(0.5)
-
-        # Wait for the in-flight task to finish (the one being processed now)
-        _save_queue.join()
-
-        # Send shutdown sentinel (optional, but clean)
+        if pending > 0:
+            log("SF", f"Flushing {pending} remaining results to disk...")
+        # Send sentinel → triggers final buffer flush inside SaveWorker
         _save_queue.put(_SENTINEL)
-        time.sleep(0.3)
+        time.sleep(0.5)  # give SaveWorker time to flush + exit
 
     log("SF", "=" * 55)
     log("SF", f"DONE! Success: {success_count} | Failed: {fail_count} | Total: {len(accounts)}")
