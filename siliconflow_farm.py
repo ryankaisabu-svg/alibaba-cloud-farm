@@ -390,16 +390,39 @@ def load_done_emails():
     return set()
 
 
+def _load_successful_emails():
+    """Load set of emails that already have a valid sk- API key from results.json.
+
+    These accounts will be SKIPPED during farming — no need to re-process.
+    """
+    results = load_results()
+    successful = set()
+    for r in results:
+        status = r.get("status", "").strip()
+        api_key = r.get("api_key", "").strip()
+        email = r.get("email", "").strip()
+        if status == "complete" and api_key.startswith("sk-") and len(api_key) > 10:
+            successful.add(email)
+    return successful
+
+
 # ════════════════════════════════════════════════════
 # Account loading — file format: email|password
 # ════════════════════════════════════════════════════
 
 def load_accounts(path, count=None):
     done = load_done_emails()
+    # Also get emails that already have valid keys → skip these too
+    has_key = _load_successful_emails()
+
     accounts = []
+    skipped_done = 0
+    skipped_haskey = 0
+
     if not os.path.exists(path):
         log("LOAD", f"Accounts file not found: {path}")
         return []
+
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -409,11 +432,36 @@ def load_accounts(path, count=None):
             if len(parts) >= 2:
                 email = parts[0].strip()
                 password = parts[1].strip()
-                if email and email not in done:
-                    accounts.append((email, password))
-                    if count and len(accounts) >= count:
-                        break
-    log("LOAD", f"Loaded {len(accounts)} accounts from {path} ({len(done)} already done)")
+                if not email:
+                    continue
+                # Skip: already processed (in done_emails.txt) but FAILED
+                # We allow re-processing of failed accounts by NOT skipping them here.
+                # Only skip done emails that succeeded — but done_emails doesn't track that,
+                # so we rely on _load_successful_emails() for the smart skip.
+                if email in done and email in has_key:
+                    skipped_haskey += 1
+                    continue
+                # Skip: already has valid API key (success dedup)
+                if email in has_key:
+                    skipped_haskey += 1
+                    log(f"LOAD", f"SKIP (has key): {email}")
+                    continue
+                # Skip: marked as done BUT also check if it was a failure
+                # If it's in done_emails but NOT in has_key, let it through for retry
+                if email in done:
+                    skipped_done += 1
+                    # Still allow retry — only skip if it has a key
+                    pass
+
+                accounts.append((email, password))
+                if count and len(accounts) >= count:
+                    break
+
+    total_in_file = sum(1 for l in open(path, encoding="utf-8")
+                        if l.strip() and "|" in l.strip() and not l.strip().startswith("#"))
+    log("LOAD", f"Loaded {len(accounts)} accounts from {path}")
+    log("LOAD", f"  File total: {total_in_file} | Skipped (has key): {skipped_haskey} | To farm: {len(accounts)}")
+
     return accounts
 
 
