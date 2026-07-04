@@ -17,6 +17,7 @@ This file is the modular replacement for the 5 tab classes in farm_gui.py.
 import os
 import sys
 import json
+import subprocess
 import csv as _csv
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, scrolledtext
