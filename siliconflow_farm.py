@@ -677,15 +677,51 @@ def run_single(email_addr, password, browser_idx=0):
             human_delay(2.0, 4.0)  # Extra wait for API Keys page to fully render
             screenshot(page, "step5_apikeys")
 
-            # ── Step 6: Create API Key & Extract ──
-            api_key = create_api_key(page, browser_idx)
+            # ── Step 6: Create API Key & Extract (with retry) ──
+            api_key = None
+            for extract_attempt in range(3):
+                api_key = create_api_key(page, browser_idx)
+                if api_key:
+                    break
+                # Detect rate limit or error message on page
+                rate_msg = page.evaluate("""() => {
+                    var body = (document.body.innerText || document.body.textContent || '');
+                    var msgs = ['rate limit', 'too many', '频率', '超出', 'exceed',
+                               'maximum', 'quota', '限制', '次数', 'limit reach'];
+                    for (var i=0; i<msgs.length; i++) {
+                        if (body.toLowerCase().indexOf(msgs[i]) !== -1) return body.substring(body.indexOf(msgs[i]), body.indexOf(msgs[i])+80);
+                    }
+                    // Check for toast/notification error
+                    var toasts = document.querySelectorAll('.ant-notification, .ant-message, [class*="toast"], [class*="notice"]');
+                    for (var t=0; t<toasts.length; t++) {
+                        var txt = (toasts[t].innerText || '').trim();
+                        if (txt.length > 3 && (txt.toLowerCase().indexOf('limit') !== -1 || txt.indexOf('错误') !== -1 || txt.indexOf('失败') !== -1))
+                            return '[TOAST] ' + txt;
+                    }
+                    return null;
+                }""")
+                if rate_msg:
+                    log(f"A{browser_idx}", f"⚠ RATE LIMIT DETECTED: {rate_msg[:100]}")
+                    result["status"] = f"RATE_LIMIT: {rate_msg[:60]}"
+                    screenshot(page, "error_ratelimit")
+                    break
+                if extract_attempt < 2:
+                    log(f"A{browser_idx}", f"Extract attempt {extract_attempt+1} failed, retrying in 3s...")
+                    time.sleep(3)
+                    # Try refreshing the API keys page
+                    page.goto(page.url, wait_until="domcontentloaded", timeout=15000)
+                    try: page.wait_for_load_state("networkidle", timeout=15000)
+                    except: pass
+                    human_delay(2.0, 3.0)
+
             if api_key:
                 result["api_key"] = api_key
                 result["status"] = "complete"
                 log(f"A{browser_idx}", f"+ SUCCESS! API Key: {api_key[:35]}...")
-            else:
+            elif not result["status"].startswith("RATE_LIMIT"):
                 result["status"] = "NO_API_KEY"
-                log(f"A{browser_idx}", "Failed to extract API key")
+                log(f"A{browser_idx}", "Failed to extract API key after 3 attempts")
+                screenshot(page, "error_noapikey")
 
         except PWTimeout as e:
             log(f"A{browser_idx}", f"Playwright Timeout: {e}")
