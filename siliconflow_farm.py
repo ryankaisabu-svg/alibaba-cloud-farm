@@ -511,6 +511,20 @@ def run_single(email_addr, password, browser_idx=0):
             )
             page = context.new_page()
 
+            # ── Fix #4: Clear ALL cookies/storage before login ──
+            # Prevents session collision between accounts on reused browser contexts
+            try:
+                context.clear_cookies()
+                log(f"A{browser_idx}", "Cleared all cookies for fresh session")
+            except Exception:
+                pass  # non-critical, context might not be fully ready yet
+
+            # Block unnecessary resources for speed + lower detection
+            try:
+                page.route("**/*.{png,jpg,jpeg,gif,svg,ico,woff2,woff,ttf,eot}", lambda route: route.abort())
+            except Exception:
+                pass
+
             # ── Step 1: Go to SiliconFlow login page ──
             log(f"A{browser_idx}", "Navigating to SiliconFlow login...")
             page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
@@ -852,10 +866,26 @@ def run_single(email_addr, password, browser_idx=0):
             try: screenshot(page, "error_exception")
             except: pass
         finally:
+            # ── Fix #3: Force cleanup — prevent resource leak across accounts
             try:
-                if context: context.close()
-                if browser: browser.close()
+                if page:
+                    page.close()  # close page first (frees memory)
             except: pass
+            try:
+                if context:
+                    context.clear_cookies()
+                    context.close()  # clear cookies then close context
+            except: pass
+            try:
+                if browser:
+                    browser.close()  # force close browser process
+            except: pass
+
+            # Force garbage collection to free RAM between accounts
+            import gc
+            gc.collect()
+            if browser_idx % 5 == 0:
+                log(f"A{browser_idx}", "Garbage collected after account batch")
 
     save_result(result)
     if result["status"] == "complete":
@@ -1662,14 +1692,20 @@ def main():
                 log(f"A{brow_idx}", "Browser finished all assigned tasks")
         
         # Launch initial workers = actual_concurrency (smart cap)
+        # STAGGERED: don't launch all browsers at once — spread over 8-15s
+        # This prevents Google from seeing 5 simultaneous logins from same IP
         active_count[0] = actual_concurrency
         threads = []
+        stagger_delay = max(3, 15 // actual_concurrency) if actual_concurrency > 1 else 0
         for b in range(actual_concurrency):
             t = threading.Thread(target=pool_worker, args=(b,))
             t.daemon = True
             threads.append(t)
             t.start()
-            log(f"SF", f"Browser {b} launched")
+            log(f"SF", f"Browser {b} launched (stagger: +{stagger_delay}s next)")
+            # Stagger: wait before launching next browser
+            if b < actual_concurrency - 1 and stagger_delay > 0:
+                time.sleep(stagger_delay)
         
         # Wait until ALL accounts processed
         account_queue.join()  # wait for queue to drain
