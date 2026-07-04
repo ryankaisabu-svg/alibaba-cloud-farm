@@ -826,6 +826,11 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
                                      labelanchor="w", padx=6, pady=3)
         single_frame.grid(row=12, column=0, columnspan=5, sticky="we", pady=(2, 0))
 
+        # Define vars FIRST (before using in widgets)
+        self.use_single_var = tk.BooleanVar(value=False)
+        self.single_email_var = tk.StringVar()
+        self.single_pass_var = tk.StringVar()
+
         # Checkbox + fields on SAME row for compactness
         cb = tk.Checkbutton(single_frame, text="Single account:",
                        variable=self.use_single_var, bg=BG_PANEL, fg=FG_MAIN,
@@ -834,14 +839,12 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
                        command=self._on_single_toggle)
         cb.pack(side=tk.LEFT)
 
-        self.single_email_var = tk.StringVar()
         tk.Entry(single_frame, textvariable=self.single_email_var, bg=BG_INPUT,
                  fg=FG_MAIN, width=18, insertbackground=FG_MAIN,
                  font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(4, 3))
 
         tk.Label(single_frame, text="Pass:", bg=BG_PANEL, fg=FG_DIM,
                  font=("Segoe UI", 8)).pack(side=tk.LEFT)
-        self.single_pass_var = tk.StringVar()
         tk.Entry(single_frame, textvariable=self.single_pass_var, bg=BG_INPUT,
                  fg=FG_MAIN, width=12, insertbackground=FG_MAIN,
                  font=("Segoe UI", 8), show="\u2022").pack(side=tk.LEFT, padx=(2, 0))
