@@ -1578,9 +1578,17 @@ def main():
         log("SF", "ERROR: No accounts available!")
         sys.exit(1)
 
-    total = min(len(accounts), COUNT) if COUNT else len(accounts)
-    accounts = accounts[:total]
-    log("SF", f"  Processing {len(accounts)} accounts...")
+    # Smart count cap: never process more than we have after dedup
+    actual_count = min(len(accounts), COUNT) if COUNT else len(accounts)
+    accounts = accounts[:actual_count]
+
+    # Smart concurrency: don't open more browsers than needed
+    actual_concurrency = min(CONCURRENCY, len(accounts)) if len(accounts) > 0 else 1
+
+    log("SF", f"  Accounts to farm: {len(accounts)} (Count={COUNT}, after dedup from file)")
+    log("SF", f"  Browser concurrency: {actual_concurrency} (requested={CONCURRENCY})")
+    if len(accounts) < CONCURRENCY and CONCURRENCY > 1:
+        log("SF", f"  ⚠ Only {len(accounts)} accounts — reduced browsers from {CONCURRENCY} to {actual_concurrency}")
 
     success_count = 0
     fail_count = 0
@@ -1653,10 +1661,10 @@ def main():
                     all_done.set()
                 log(f"A{brow_idx}", "Browser finished all assigned tasks")
         
-        # Launch initial workers = CONCURRENCY
-        active_count[0] = min(CONCURRENCY, len(accounts))
+        # Launch initial workers = actual_concurrency (smart cap)
+        active_count[0] = actual_concurrency
         threads = []
-        for b in range(active_count[0]):
+        for b in range(actual_concurrency):
             t = threading.Thread(target=pool_worker, args=(b,))
             t.daemon = True
             threads.append(t)
