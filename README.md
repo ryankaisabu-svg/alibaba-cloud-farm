@@ -1,124 +1,209 @@
-# Alibaba Cloud Account Farm
+# Alibaba Cloud Farm — Multi-Provider API Key Harvesting Suite
 
-Bulk-register Alibaba Cloud accounts and harvest Model Studio API keys. Each new account gets **1M free tokens** for Qwen models.
+Bulk-register accounts and harvest free API keys across multiple AI providers. Each account gets **free tokens** for their respective models.
 
-## Features
+## Providers
 
-- **Camoufox browser automation** (Firefox-based, anti-detect)
-- **IMAP OTP verification** — works with any IMAP provider (Gmail, Outlook, etc.)
-- **No login needed** — session carries from register to Model Studio
-- **Auto slider skip** — if Baxia captcha appears, skip and retry
-- **API key extraction** — `sk-ws-...` key auto-extracted from modal
-- **Configurable via `.env`** — no hardcoded credentials
+| Provider | Free Tokens | Engine | Status |
+|----------|-----------|--------|--------|
+| **Alibaba Cloud** (Qwen) | 1M tokens/account | Camoufox (Firefox anti-detect) | ✅ Stable |
+| **SiliconFlow** | Variable per model | Patchright + Nodriver | ✅ Stable |
+| **WaveSpeed.ai** | Variable | **Nodriver only** (CF bypass) | ✅ v31 |
+| **Mistral AI** | Variable | Playwright/Patchright | ✅ |
+| **Xiaomi** | Variable | Playwright/Patchright | ✅ |
 
-## Flow (9 steps)
+## Architecture
 
-1. Navigate to Alibaba Cloud register page
-2. Select Individual account → Next
-3. Fill email + password → Sign Up (Step 1)
-4. Select Email verification tab
-5. Set country = Singapore → Send OTP
-6. Read OTP from IMAP → type → Sign Up (Step 2)
-7. Open Model Studio (no login — session carries from register)
-8. Dashboard → API Key → Create API Key → OK
-9. Extract `sk-ws-...` API key from modal
+```
+alibaba-cloud-farm/
+├── core/                    # Shared modules
+│   ├── browser_engine.py    # Browser management (Camoufox, Nodriver, Playwright)
+│   ├── captcha_solver.py    # CAPTCHA/slider solving strategies
+│   ├── config.py            # .env loader & defaults
+│   ├── email_providers.py   # IMAP OTP reading (Gmail, Outlook, custom)
+│   ├── helpers.py           # Utilities (humanizer, delays, retry)
+│   └── registry.py          # Farm registry / discovery
+├── farms/                   # Farm implementations
+├── gui/                     # CustomTkinter GUI app
+│   ├── app.py               # Main window
+│   ├── base_tab.py          # Base tab class
+│   └── tabs.py              # Per-provider tabs
+├── utils/                   # Shared utilities
+│   ├── humanizer.py         # Text/behavior humanization
+│   └── proxy_manager.py     # Proxy rotation
+├── wavespeed_farm.py        # WaveSpeed farm (Nodriver, CF bypass)
+├── siliconflow_farm.py      # SiliconFlow farm
+├── mistral_farm.py          # Mistral AI farm
+├── mistral_register.py      # Mistral account registration
+├── alibaba_farm.py          # Alibaba/Qwen main farm
+├── alibaba_register.py      # Alibaba account registration
+├── xiaomi_farm.py           # Xiaomi farm
+├── xiaomi_register.py       # Xiaomi account registration
+├── email_farm.py            # Email/alias management
+├── farm.py                  # CLI entry point (headless)
+├── farm_gui.py              # GUI entry point
+├── farm_headless.py         # Headless batch mode
+├── config/config_solver.json# Solver preferences
+├── .env                     # Credentials (gitignored!)
+└── data/                    # Results (gitignored!)
+```
 
-## Prerequisites
-
-### 1. Catch-all Domain
-
-You need a domain with **catch-all email forwarding** — any `*@yourdomain.com` lands in your inbox.
-
-Options:
-- **Cloudflare Email Routing** (free) — set catch-all rule → forward to your Gmail
-- **ImprovMX** (free tier) — MX records → forward to your email
-- **Self-hosted** — any mail server with catch-all alias
-
-### 2. Gmail App Password
-
-If using Gmail as your inbox:
-
-1. Enable **2-Step Verification**: [Google Account → Security](https://myaccount.google.com/security)
-2. Generate **App Password**: [Google Account → App passwords](https://myaccount.google.com/apppasswords)
-3. Copy the 16-char password (format: `abcd efgh ijkl mnop`)
-
-## Setup
+## Quick Start
 
 ```bash
-git clone https://github.com/Micolaabdi/alibaba-cloud-farm.git
+git clone https://github.com/ryankaisabu-svg/alibaba-cloud-farm.git
 cd alibaba-cloud-farm
 
 pip install -r requirements.txt
-camoufox fetch  # download browser binary (~700MB)
-sudo chmod 666 /dev/uinput  # for slider solver (optional)
-```
 
-## Config
-
-Copy the example env file and fill in your credentials:
-
-```bash
-cp .env.example .env
+cp .env.example .env   # or create .env with your creds
 ```
 
 Edit `.env`:
 
 ```env
+# Gmail IMAP (for OTP verification)
 IMAP_USER=your@gmail.com
-IMAP_PASS=abcd efgh ijkl mnop
+IMAP_PASS=abcd efgh ijkl mnop    # App Password, NOT regular password
 EMAIL_DOMAIN=your-catchall-domain.com
+
+# Optional: CapSolver for reCAPTCHA
+CAPSOLVER_API_KEY=CAP-xxxxx
 ```
 
-Or export as environment variables:
+## Usage
+
+### WaveSpeed Farm (Nodriver — CF Bypass)
 
 ```bash
-export IMAP_USER="your@gmail.com"
-export IMAP_PASS="abcd efgh ijkl mnop"
-export EMAIL_DOMAIN="yourdomain.com"
+# Single account
+python wavespeed_farm.py --email user@domain.com --pass PASSWORD --show
+
+# Multiple accounts from file (format: email|password per line)
+python wavespeed_farm.py --accounts-file gsuite_accounts.txt --count 10 --show
+
+# Headless (no browser window)
+python wavespeed_farm.py --email user@domain.com --pass PASSWORD
 ```
+
+**Flow:** CF Turnstile (~120s) → Google OAuth → Email → Password → Speedbump/TOS → Consent → Dashboard → `/accesskey` → Generate API Key (`wsk_live_...`)
+
+> ⚠️ Only **Nodriver** engine bypasses WaveSpeed's Cloudflare Turnstile. Patchright/Playwright get token=0.
+
+### SiliconFlow Farm
+
+```bash
+python siliconflow_farm.py --email user@gsuite.com --pass xxxxx --show --debug
+python siliconflow_farm.py --accounts-file sf_accounts.txt --count 50
+```
+
+### Alibaba Cloud / Qwen Farm
+
+```bash
+# GUI
+python farm_gui.py
+
+# Headless
+python farm.py --provider alibaba --gmail user@gmail.com --apppass '**** **** **** ****'
+
+# With display (slider solver needs screen)
+xvfb-run -a python farm.py
+```
+
+### Mistral Farm
+
+```bash
+python mistral_farm.py --gmail user@gmail.com --apppass xxxx --count 5
+```
+
+### Xiaomi Farm
+
+```bash
+python xiaomi_farm.py --email user@domain.com --pass PASSWORD --show
+```
+
+## GUI
+
+```bash
+python farm_gui.py
+```
+
+CustomTkinter desktop app with tabs for each provider. Features:
+- Real-time progress monitoring
+- Per-account status tracking
+- Start/Stop/Pause controls
+- Batch processing with configurable concurrency
+
+## Config Reference
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `IMAP_USER` | ✅ | — | Your IMAP email address (e.g. Gmail) |
-| `IMAP_PASS` | ✅ | — | IMAP password (Gmail App Password, not your regular password) |
-| `EMAIL_DOMAIN` | ✅ | — | Your catch-all domain for receiving OTPs |
+| `IMAP_USER` | ✅* | — | Gmail address for OTP reading |
+| `IMAP_PASS` | ✅* | — | Gmail App Password (16 chars) |
+| `EMAIL_DOMAIN` | ✅* | — | Catch-all domain for alias emails |
 | `IMAP_HOST` | ❌ | `imap.gmail.com` | IMAP server hostname |
-| `IMAP_PORT` | ❌ | `993` | IMAP server port |
-| `RESULTS_FILE` | ❌ | `results.json` | Path to save harvested accounts |
+| `IMAP_PORT` | ❌ | `993` | IMAP port |
+| `CAPSOLVER_API_KEY` | ❌ | — | CapSolver API key for reCAPTCHA |
 
-## Run
+*Required for providers that use email verification (Alibaba, Mistral, etc.)
 
-```bash
-xvfb-run -a python3 farm.py
-```
+## Prerequisites
+
+### Catch-all Domain
+
+You need a domain with **catch-all email forwarding** — any `*@yourdomain.com` lands in your inbox.
+
+Options:
+- **Cloudflare Email Routing** (free) — catch-all rule → forward to Gmail
+- **ImprovMX** (free tier) — MX records → forward to your email
+- **Self-hosted** — any mail server with catch-all alias
+
+### Gmail App Password (for OTP)
+
+1. Enable [2-Step Verification](https://myaccount.google.com/security)
+2. Generate [App Password](https://myaccount.google.com/apppasswords)
+3. Copy the 16-char password: `abcd efgh ijkl mnop`
 
 ## Results
 
-Accounts saved to `results.json`:
+Each provider saves results to its own JSON file under `data/<provider>/`:
 
 ```json
 [
   {
-    "email": "abc123@yourdomain.com",
-    "password": "Aa1xxxxxxxxxxxx",
-    "api_key": "sk-ws-H.LIDDEM...",
-    "timestamp": "2026-06-26 00:47:12"
+    "email": "user@domain.com",
+    "api_key": "wsk_live_xxxx" || "sk-xxxxx",
+    "status": "complete",
+    "timestamp": "2026-07-04 12:00:00"
   }
 ]
 ```
 
+| File | Provider |
+|---|---|
+| `data/alibaba/alibaba_results.json` | Alibaba/Qwen |
+| `data/siliconflow/siliconflow_results.json` | SiliconFlow |
+| `data/wavespeed/wavespeed_results.json` | WaveSpeed |
+| `data/mistral/` | Mistral AI |
+| `data/xiaomi/` | Xiaomi |
+
+> All `data/` files are **gitignored** — never committed.
+
 ## Notes
 
-- **Slider captcha** appears ~50% on datacenter IPs. Script skips and retries.
-- **OTP** is unique per email. Regex extracts from `<span>` tag, NOT CSS color codes.
-- **No proxy needed** — direct VPS IP works (slider skip handles it).
-- **1M free tokens** per account for Qwen3.7-Max, Qwen3.7-Plus, etc.
+- **Cloudflare Turnstile** on WaveSpeed requires **Nodriver** engine only (~120s solve time). Other engines fail.
+- **Slider captcha** appears ~50% on datacenter IPs for Alibaba. Script auto-skips and retries.
+- **OTP extraction** uses regex on `<span>` tags, not CSS color codes (more reliable).
+- **No proxy needed** for most providers — direct IP works.
+- **Domain restriction**: Some providers (e.g., WaveSpeed) may restrict certain email domains.
 
-## API Key Usage
+## Security
 
-```bash
-curl https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"qwen3.7-max","messages":[{"role":"user","content":"Hello"}]}'
-```
+- `.env` is gitignored — never commit credentials
+- `data/` directory is gitignored — contains accounts, passwords, and API keys
+- No hardcoded credentials in any source file
+- All credentials passed via CLI args or environment variables
+
+## License
+
+MIT
