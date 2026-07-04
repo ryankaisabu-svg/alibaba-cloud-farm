@@ -81,21 +81,32 @@ def _get_save_queue():
                         email_map[em] = len(existing) - 1
                 save_results(existing)
 
-                # ── Append CSV rows ──
-                for result in buffer_list:
-                    append_csv(result.get("email", ""), result.get("api_key", ""),
-                               result.get("status", "unknown"))
+                # ── Append CSV rows (inside lock) ──
+                with _file_lock:
+                    csv_path = os.path.join(_DATA_DIR, "siliconflow_keys.csv")
+                    for result in buffer_list:
+                        try:
+                            with open(csv_path, "a", encoding="utf-8", newline="") as cf:
+                                w = csv.writer(cf)
+                                w.writerow([result.get("email", ""),
+                                           result.get("api_key", ""),
+                                           result.get("status", "unknown"),
+                                           _time.strftime("%Y-%m-%d %H:%M:%S")])
+                        except OSError:
+                            pass  # skip if file temporarily unavailable
 
-                # ── Sync master CSV once for entire batch ──
-                for result in buffer_list:
-                    try:
-                        _sync_master_csv(result)
-                    except Exception:
-                        pass
+                # ── Sync master CSV once per batch (inside lock) ──
+                with _file_lock:
+                    for result in buffer_list:
+                        try:
+                            _sync_master_csv(result)
+                        except (OSError, IOError) as e2:
+                            log("BATCH", f"master CSV sync skipped ({e2})")
 
-                # ── Mark all done ──
-                for result in buffer_list:
-                    mark_email_done(result["email"])
+                # ── Mark all done (quick append, inside lock) ──
+                with _file_lock:
+                    for result in buffer_list:
+                        mark_email_done(result["email"])
 
                 log("BATCH", f"Flushed {len(buffer_list)} results to disk")
             except Exception as e:
