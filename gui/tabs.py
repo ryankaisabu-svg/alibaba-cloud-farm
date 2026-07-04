@@ -810,6 +810,9 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
                  fg=FG_MAIN, width=18, insertbackground=FG_MAIN,
                  font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(3, 3), fill=tk.X, expand=True)
 
+        # Bind: auto-detect count when file path changes (type or paste)
+        self.accounts_file_var.trace_add("write", self._on_file_path_changed)
+
         tk.Button(f_row, text="Browse...", bg=ACCENT, fg="#1e1e2e",
                   font=("Segoe UI", 7), relief=tk.FLAT, padx=4, cursor="hand2",
                   command=self._browse_accounts).pack(side=tk.LEFT)
@@ -858,10 +861,48 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
         )
         if path:
             self.accounts_file_var.set(path)
-            self._refresh_summary()
+            self._auto_detect_count()
 
     def _on_single_toggle(self):
         pass
+
+    def _auto_detect_count(self):
+        """Count non-empty lines in accounts file → auto-fill Count spinbox.
+
+        Only overwrites Count if user hasn't manually changed it.
+        User can still edit Count to any lower number.
+        """
+        path = self.accounts_file_var.get().strip()
+        count_label = getattr(self, 'account_count_var', None)
+
+        if not path or not os.path.isfile(path):
+            if count_label:
+                count_label.set("⚠ File not found")
+            return
+
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                lines = [l.strip() for l in f if l.strip() and "|" in l]
+
+            total = len(lines)
+
+            # Update info label
+            if count_label:
+                count_label.set(f"📄 {total} accounts")
+
+            # Auto-fill Count spinbox with total lines
+            if total > 0:
+                self.count_var.set(str(total))
+
+        except Exception as e:
+            if count_label:
+                count_label.set("⚠ Error reading file")
+
+    def _on_file_path_changed(self, *args):
+        """Trace callback when accounts file path Entry is edited (debounce 500ms)."""
+        if hasattr(self, '_count_debounce_id'):
+            self.after_cancel(self._count_debounce_id)
+        self._count_debounce_id = self.after(500, self._auto_detect_count)
 
     def _build_args(self):
         args = []
@@ -932,6 +973,8 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
 
         # Load data immediately
         self.after(100, self._refresh_summary)
+        # Auto-detect count from default accounts file
+        self.after(200, self._auto_detect_count)
 
     def _on_stats_received(self):
         """Called by BaseFarmTab when [STATS] line received — refresh dashboard."""
