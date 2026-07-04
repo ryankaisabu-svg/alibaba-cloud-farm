@@ -115,7 +115,7 @@ JS_EXTRACT_KEY = """(() => {
 
 def parse_args():
     args = {'email': None, 'password': None, 'accounts_file': None,
-            'count': 1, 'show': False}
+            'count': 1, 'show': False, 'proxy': None}
     i = 0
     while i < len(sys.argv):
         a = sys.argv[i]
@@ -131,6 +131,8 @@ def parse_args():
             i += 2
         elif a == '--show':
             args['show'] = True; i += 1
+        elif a == '--proxy' and i+1 < len(sys.argv):
+            args['proxy'] = sys.argv[i+1]; i += 2
         else:
             i += 1
     return args
@@ -640,7 +642,13 @@ async def main():
 
     import nodriver as uc
 
-    browser = await uc.start(headless=(not show_browser))
+    # ── Proxy support (from GUI global widget or CLI) ──
+    launch_kwargs = {"headless": (not show_browser)}
+    if args.get('proxy'):
+        launch_kwargs["proxy"] = {"server": args['proxy']}
+        print(f"[PROXY] Using proxy: {args['proxy'][:30]}...")
+
+    browser = await uc.start(**launch_kwargs)
 
     results = {"ok": 0, "fail": 0, "errors": []}
 

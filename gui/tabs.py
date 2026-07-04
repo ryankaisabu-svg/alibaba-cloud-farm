@@ -852,6 +852,10 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
                  fg=FG_MAIN, width=12, insertbackground=FG_MAIN,
                  font=("Segoe UI", 8), show="\u2022").pack(side=tk.LEFT, padx=(2, 0))
 
+        # ═══ Section 3: Proxy (Global Widget) ═══
+        from gui.proxy import build_proxy_widget
+        self.proxy_vars = build_proxy_widget(settings, row_offset=14)
+
     def _browse_accounts(self):
         from tkinter import filedialog
         path = filedialog.askopenfilename(
@@ -865,6 +869,27 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
 
     def _on_single_toggle(self):
         pass
+
+    def _build_args(self):
+        """Build CLI args including proxy if enabled."""
+        args = []
+        if self.use_single_var.get():
+            email = self.single_email_var.get().strip()
+            pw = self.single_pass_var.get().strip()
+            if email and pw:
+                args.extend(["--email", email, "--pass", pw])
+            else:
+                args.extend(["--accounts-file", self.accounts_file_var.get().strip()])
+        else:
+            args.extend(["--accounts-file", self.accounts_file_var.get().strip()])
+
+        # ── Append proxy args from global widget ──
+        from gui.proxy import get_proxy_args
+        proxy_args = get_proxy_args(self.proxy_vars)
+        if proxy_args:
+            args.extend(proxy_args)
+
+        return args
 
     def _auto_detect_count(self):
         """Count non-empty lines in accounts file → auto-fill Count spinbox.
@@ -915,9 +940,16 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
                 args.extend(["--accounts-file", self.accounts_file_var.get().strip()])
         else:
             args.extend(["--accounts-file", self.accounts_file_var.get().strip()])
+
+        # ── Append proxy args from global widget ──
+        from gui.proxy import get_proxy_args
+        proxy_args = get_proxy_args(self.proxy_vars)
+        if proxy_args:
+            args.extend(proxy_args)
+
         return args
 
-    # ── Realtime Dashboard overrides ──────────────────
+    # ── Next method (varies by tab) ──
 
     def _post_init(self):
         if hasattr(self, '_specs'):
@@ -1323,57 +1355,11 @@ class WaveSpeedTab(BaseFarmTab, HorizontalLayoutMixin):
         tk.Label(sec1, textvariable=self.account_count_var, bg=BG_PANEL,
                  fg=ACCENT_YELLOW, font=("Segoe UI", 8)).pack(anchor="w", pady=(3, 0))
 
-        # ── Section: Proxy Settings ──
-        sec2 = tk.LabelFrame(settings, text="  \U0001f6a7  PROXY (WebShare)  ", bg=BG_PANEL,
-                              fg=ACCENT, font=("Segoe UI", 8, "bold"),
-                              labelanchor="w", padx=8, pady=5)
-        sec2.grid(row=20, column=0, columnspan=5, sticky="we", pady=(8, 3))
+        # ═══ Section: Proxy (Global Widget) — replaces old WebShare-only code ═══
+        from gui.proxy import build_proxy_widget
+        self.proxy_vars = build_proxy_widget(settings, row_offset=20)
 
-        # Proxy mode: auto / manual
-        self.proxy_mode_var = tk.StringVar(value="auto")
-        pm_row = tk.Frame(sec2, bg=BG_PANEL)
-        pm_row.pack(fill=tk.X, pady=(0, 3))
-
-        for pval, ptext in [("auto", "\U0001f504 Auto (rotate from list)"), ("manual", "\u270f Manual")]:
-            rb = tk.Radiobutton(pm_row, text=ptext, variable=self.proxy_mode_var,
-                               value=pval, bg=BG_PANEL, fg=FG_MAIN,
-                               selectcolor=BG_INPUT, activebackground=BG_PANEL,
-                               font=("Segoe UI", 8),
-                               command=self._on_proxy_mode_toggle)
-            rb.pack(side=tk.LEFT, padx=(0, 10))
-
-        # Manual proxy fields
-        self.proxy_frame = tk.Frame(sec2, bg=BG_PANEL)
-        self.proxy_frame.pack(fill=tk.X)
-
-        self.proxy_host_var = tk.StringVar(value="p.webshare.io")
-        self.proxy_port_var = tk.StringVar(value="80")
-        self.proxy_user_var = tk.StringVar(value="")
-        self.proxy_pass_var = tk.StringVar(value="")
-
-        fields = [
-            ("Host:", self.proxy_host_var, 16),
-            ("Port:", self.proxy_port_var, 5),
-            ("User:", self.proxy_user_var, 14),
-            ("Pass:", self.proxy_pass_var, 12),
-        ]
-        for label_text, var, width in fields:
-            row_f = tk.Frame(self.proxy_frame, bg=BG_PANEL)
-            row_f.pack(side=tk.LEFT, padx=(0, 4))
-            show_char = "*" if "ass" in label_text else None
-            tk.Label(row_f, text=label_text, bg=BG_PANEL, fg=FG_DIM,
-                     font=("Segoe UI", 8), width=4, anchor="e").pack(side=tk.LEFT)
-            tk.Entry(row_f, textvariable=var, bg=BG_INPUT, fg=FG_MAIN,
-                     width=width, insertbackground=FG_MAIN,
-                     font=("Segoe UI", 8), show=show_char).pack(side=tk.LEFT)
-
-        # Proxy status label
-        self.proxy_status_var = tk.StringVar(value="\U0001f3af 20,000 proxies loaded")
-        tk.Label(sec2, textvariable=self.proxy_status_var, bg=BG_PANEL,
-                 fg=ACCENT_GREEN, font=("Segoe UI", 7)).pack(anchor="w", pady=(3, 0))
-
-        # ── Section: Single Account Mode ──
-        self.use_single_var = tk.BooleanVar(value=False)
+    def _browse_accounts(self):
         self.single_email_var = tk.StringVar()
         self.single_pass_var = tk.StringVar()
 
@@ -1417,15 +1403,7 @@ class WaveSpeedTab(BaseFarmTab, HorizontalLayoutMixin):
     def _on_single_toggle(self):
         pass
 
-    def _on_proxy_mode_toggle(self):
-        mode = self.proxy_mode_var.get()
-        if mode == "auto":
-            self.proxy_frame.pack_forget()
-            self.proxy_status_var.set("\U0001f3af Auto-rotate from proxy list")
-        else:
-            self.proxy_frame.pack(fill=tk.X, pady=(4, 0))
-            self.proxy_status_var.set("\U0001f527 Enter proxy details above")
-
+    # NOTE: _on_proxy_mode_toggle removed — now handled by gui/proxy.py global widget
 
     def _build_args(self):
         args = []
@@ -1438,9 +1416,16 @@ class WaveSpeedTab(BaseFarmTab, HorizontalLayoutMixin):
                 args.extend(["--accounts-file", self.accounts_file_var.get().strip()])
         else:
             args.extend(["--accounts-file", self.accounts_file_var.get().strip()])
+
+        # ── Append proxy args from global widget ──
+        from gui.proxy import get_proxy_args
+        proxy_args = get_proxy_args(self.proxy_vars)
+        if proxy_args:
+            args.extend(proxy_args)
+
         return args
 
-    # ── Realtime Dashboard overrides ──────────────────
+    # ── Next method (varies by tab) ──
 
     def _post_init(self):
         if hasattr(self, '_specs'):
