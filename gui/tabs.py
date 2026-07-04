@@ -779,51 +779,81 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
         self._build_horizontal_ui()
 
     def _build_settings(self, settings):
-        """GSuite accounts file path input + single account override."""
-        # Accounts file
-        tk.Label(settings, text="Accounts File:", bg=BG_PANEL, fg=FG_MAIN,
-                 font=("Segoe UI", 9)).grid(row=2, column=0, sticky="w", pady=3)
+        """GSuite accounts file path input + single account override.
+
+        Layout (uses LabelFrame sections like WaveSpeedTab — no overlap):
+          Row 10: [📁 ACCOUNTS SOURCE] LabelFrame
+            - Accounts File entry + Browse button
+            - Account count label
+          Row 12: [✅ SINGLE ACCOUNT MODE]
+            - Checkbox + Email/Pass fields
+        """
+        # ═══ Section 1: Account Source ═══
+        sec1 = tk.LabelFrame(settings, text=" \U0001f4c1  ACCOUNTS SOURCE ", bg=BG_PANEL,
+                              fg=ACCENT, font=("Segoe UI", 8, "bold"),
+                              labelanchor="w", padx=8, pady=5)
+        sec1.grid(row=10, column=0, columnspan=5, sticky="we", pady=(8, 3))
+
+        # File path row
+        f_row = tk.Frame(sec1, bg=BG_PANEL)
+        f_row.pack(fill=tk.X, pady=(0, 2))
+
+        tk.Label(f_row, text="File:", bg=BG_PANEL, fg=FG_DIM,
+                 font=("Segoe UI", 8)).pack(side=tk.LEFT)
 
         from data_paths import get_path as gp
-        default_accounts = os.path.join(FARM_DIR, "data", "siliconflow", "sf_pending.txt")
+        default_accounts = os.path.join(FARM_DIR, "data", "siliconflow",
+                                        "sf_pending.txt")
 
         self.accounts_file_var = tk.StringVar(value=default_accounts)
-        tk.Entry(settings, textvariable=self.accounts_file_var, bg=BG_INPUT,
-                 fg=FG_MAIN, width=32, insertbackground=FG_MAIN,
-                 font=("Segoe UI", 9)).grid(row=2, column=1, columnspan=3,
-                                            sticky="we", pady=3, padx=(5, 0))
+        tk.Entry(f_row, textvariable=self.accounts_file_var, bg=BG_INPUT,
+                 fg=FG_MAIN, width=30, insertbackground=FG_MAIN,
+                 font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(4, 4), fill=tk.X, expand=True)
 
-        # Browse button
-        tk.Button(settings, text="Browse...", bg=ACCENT, fg="#1e1e2e",
-                  font=("Segoe UI", 8), relief=tk.FLAT, padx=8, cursor="hand2",
-                  command=self._browse_accounts).grid(
-                      row=2, column=4, sticky="w", pady=3, padx=(2, 0))
+        tk.Button(f_row, text="Browse...", bg=ACCENT, fg="#1e1e2e",
+                  font=("Segoe UI", 7), relief=tk.FLAT, padx=6, cursor="hand2",
+                  command=self._browse_accounts).pack(side=tk.LEFT)
 
-        # Single account mode
-        single_frame = tk.Frame(settings, bg=BG_PANEL)
-        single_frame.grid(row=4, column=0, columnspan=5, sticky="we", pady=(3, 0))
+        # Account count label
+        self.account_count_var = tk.StringVar(value="\u23f3 Loading...")
+        tk.Label(sec1, textvariable=self.account_count_var, bg=BG_PANEL,
+                 fg=ACCENT_YELLOW, font=("Segoe UI", 8)).pack(anchor="w", pady=(3, 0))
+
+        # ═══ Section 2: Single Account Mode ═══
+        single_frame = tk.LabelFrame(settings, text=" \u2705  SINGLE ACCOUNT MODE ",
+                                     bg=BG_PANEL, fg=ACCENT,
+                                     font=("Segoe UI", 8, "bold"),
+                                     labelanchor="w", padx=8, pady=5)
+        single_frame.grid(row=12, column=0, columnspan=5, sticky="we", pady=(3, 0))
+
+        # Checkbox row
+        cb_row = tk.Frame(single_frame, bg=BG_PANEL)
+        cb_row.pack(fill=tk.X)
 
         self.use_single_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(single_frame, text="Single account mode (overrides file):",
+        tk.Checkbutton(cb_row, text="Override file with single account below:",
                        variable=self.use_single_var, bg=BG_PANEL, fg=FG_MAIN,
                        selectcolor=BG_INPUT, activebackground=BG_PANEL,
                        activeforeground=FG_MAIN, font=("Segoe UI", 9),
                        command=self._on_single_toggle).pack(side=tk.LEFT)
 
+        # Email + Pass row (indented under checkbox)
+        ep_frame = tk.Frame(single_frame, bg=BG_PANEL)
+        ep_frame.pack(fill=tk.X, padx=(20, 0), pady=(4, 0))
+
+        tk.Label(ep_frame, text="Email:", bg=BG_PANEL, fg=FG_DIM,
+                 font=("Segoe UI", 8), width=6, anchor="e").pack(side=tk.LEFT)
         self.single_email_var = tk.StringVar()
+        tk.Entry(ep_frame, textvariable=self.single_email_var, bg=BG_INPUT,
+                 fg=FG_MAIN, width=26, insertbackground=FG_MAIN,
+                 font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(3, 6))
+
+        tk.Label(ep_frame, text="Pass:", bg=BG_PANEL, fg=FG_DIM,
+                 font=("Segoe UI", 8), width=5, anchor="e").pack(side=tk.LEFT)
         self.single_pass_var = tk.StringVar()
-
-        tk.Label(single_frame, text="Email:", bg=BG_PANEL, fg=FG_DIM,
-                 font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(10, 2))
-        tk.Entry(single_frame, textvariable=self.single_email_var, bg=BG_INPUT,
-                 fg=FG_MAIN, width=22, insertbackground=FG_MAIN,
-                 font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(0, 5))
-
-        tk.Label(single_frame, text="Pass:", bg=BG_PANEL, fg=FG_DIM,
-                 font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(5, 2))
-        tk.Entry(single_frame, textvariable=self.single_pass_var, bg=BG_INPUT,
-                 fg=FG_MAIN, width=15, insertbackground=FG_MAIN,
-                 font=("Segoe UI", 8), show="*").pack(side=tk.LEFT)
+        tk.Entry(ep_frame, textvariable=self.single_pass_var, bg=BG_INPUT,
+                 fg=FG_MAIN, width=14, insertbackground=FG_MAIN,
+                 font=("Segoe UI", 8), show="\u2022").pack(side=tk.LEFT, padx=(3, 0))
 
     def _browse_accounts(self):
         from tkinter import filedialog
