@@ -36,7 +36,8 @@ import csv as _csv
 # Only 1 browser clicks TOS at a time to avoid Google rate-limit detection
 _tos_lock = threading.Lock()
 _last_tos_click_time = 0
-_TOS_COOLDOWN_SECONDS = 1  # Minimum seconds between TOS clicks (reduced from 3)
+_TOS_COOLDOWN_SECONDS = 2  # Minimum seconds between TOS clicks (was 3, now 2 for balance)
+_TOS_MAX_WAIT = 60  # Max seconds a browser will wait for TOS lock (prevent infinite block)
 
 # ── File I/O Lock ─────────────────────────────────────
 # Prevent race condition when multiple threads write to same file simultaneously
@@ -332,7 +333,7 @@ def _sync_master_csv(result):
             # Failed result — remove or mark as NO_API_KEY
             rows = [r for r in rows if r["email"] != email]
 
-        # Re-number + write
+        # Re-number + write (thread-safe with _file_lock)
         rows.sort(key=lambda r: r["email"])
         with open(MASTER_CSV, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -347,31 +348,42 @@ def _sync_master_csv(result):
 
 
 def save_result(result):
-    """Save a single result, merging with existing data. Never loses old entries."""
-    results = load_results()
-    
-    existing_emails = {r.get("email", ""): i for i, r in enumerate(results)}
-    
-    if result.get("email", "") in existing_emails:
-        idx = existing_emails[result["email"]]
-        old_status = results[idx].get("status", "")
-        new_status = result.get("status", "")
-        
-        if old_status == "complete" and new_status != "complete":
-            log("SAVE", f"Keeping existing 'complete' for {result['email']} (not downgrading to {new_status})")
-            return
-        
-        results[idx] = result
-        log("SAVE", f"Updated result for {result['email']}: {old_status} -> {new_status}")
-    else:
-        results.append(result)
-        log("SAVE", f"Appended new result for {result['email']}: {result.get('status','?')}")
-    
-    save_results(results)
+    """Save a single result, merging with existing data. Never loses old entries.
+
+    Thread-safe: uses _file_lock to prevent data corruption when multiple
+    browsers finish simultaneously and try to write results.json at the same time.
+    """
+    with _file_lock:
+        results = load_results()
+
+        existing_emails = {r.get("email", ""): i for i, r in enumerate(results)}
+
+        if result.get("email", "") in existing_emails:
+            idx = existing_emails[result["email"]]
+            old_status = results[idx].get("status", "")
+            new_status = result.get("status", "")
+
+            if old_status == "complete" and new_status != "complete":
+                log("SAVE", f"Keeping existing 'complete' for {result['email']} (not downgrading to {new_status})")
+                return
+
+            results[idx] = result
+            log("SAVE", f"Updated result for {result['email']}: {old_status} -> {new_status}")
+        else:
+            results.append(result)
+            log("SAVE", f"Appended new result for {result['email']}: {result.get('status','?')}")
+
+        save_results(results)
+
     append_csv(result.get("email", ""), result.get("api_key", ""), result.get("status", "unknown"))
-    
+
     # Auto-sync master CSV so it always stays up-to-date without manual re-matching
-    _sync_master_csv(result)
+    # Thread-safe: wrap in _file_lock to prevent race condition with other threads
+    try:
+        with _file_lock:
+            _sync_master_csv(result)
+    except Exception:
+        pass  # non-critical, don't crash the farm if sync fails
 
 
 def mark_email_done(email):
@@ -497,13 +509,20 @@ def run_single(email_addr, password, browser_idx=0):
                 kwargs["proxy"] = {"server": PROXY}
 
             browser = p.chromium.launch(**kwargs)
+
+            # ── Fix #2: Rotate User-Agent per browser to reduce fingerprinting
+            _user_agents = [
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            ]
+            _ua = _user_agents[browser_idx % len(_user_agents)]
+
             context = browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/131.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1280, "height": 800},
+                user_agent=_ua,
+                viewport={"width": 1280 + (browser_idx * 37) % 200, "height": 800 + (browser_idx * 23) % 100},
                 locale="en-SG",
                 timezone_id="Asia/Singapore",
                 geolocation={"latitude": 1.3521, "longitude": 103.8198},  # Singapore
