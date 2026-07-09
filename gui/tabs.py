@@ -929,26 +929,6 @@ class SiliconFlowTab(BaseFarmTab, HorizontalLayoutMixin):
             self.after_cancel(self._count_debounce_id)
         self._count_debounce_id = self.after(500, self._auto_detect_count)
 
-    def _build_args(self):
-        args = []
-        if self.use_single_var.get():
-            email = self.single_email_var.get().strip()
-            pw = self.single_pass_var.get().strip()
-            if email and pw:
-                args.extend(["--email", email, "--pass", pw])
-            else:
-                args.extend(["--accounts-file", self.accounts_file_var.get().strip()])
-        else:
-            args.extend(["--accounts-file", self.accounts_file_var.get().strip()])
-
-        # ── Append proxy args from global widget ──
-        from gui.proxy import get_proxy_args
-        proxy_args = get_proxy_args(self.proxy_vars)
-        if proxy_args:
-            args.extend(proxy_args)
-
-        return args
-
     # ── Next method (varies by tab) ──
 
     def _post_init(self):
@@ -1355,39 +1335,14 @@ class WaveSpeedTab(BaseFarmTab, HorizontalLayoutMixin):
         tk.Label(sec1, textvariable=self.account_count_var, bg=BG_PANEL,
                  fg=ACCENT_YELLOW, font=("Segoe UI", 8)).pack(anchor="w", pady=(3, 0))
 
-        # ═══ Section: Proxy (Global Widget) — replaces old WebShare-only code ═══
-        from gui.proxy import build_proxy_widget
-        self.proxy_vars = build_proxy_widget(settings, row_offset=20)
-
-    def _browse_accounts(self):
+        # Single account mode vars
+        self.use_single_var = tk.BooleanVar(value=False)
         self.single_email_var = tk.StringVar()
         self.single_pass_var = tk.StringVar()
 
-        single_frame = tk.Frame(settings, bg=BG_PANEL)
-        single_frame.grid(row=12, column=0, columnspan=5, sticky="we")
-
-        cb = tk.Checkbutton(single_frame, text="\u2705  Single Account Mode (overrides file)",
-                           variable=self.use_single_var, bg=BG_PANEL, fg=FG_MAIN,
-                           selectcolor=BG_INPUT, activebackground=BG_PANEL,
-                           activeforeground=FG_MAIN, font=("Segoe UI", 9),
-                           command=self._on_single_toggle)
-        cb.pack(anchor="w", pady=(0, 4))
-
-        # Email + Pass row (indented under checkbox)
-        ep_frame = tk.Frame(single_frame, bg=BG_PANEL)
-        ep_frame.pack(fill=tk.X, padx=(20, 0))
-
-        tk.Label(ep_frame, text="Email:", bg=BG_PANEL, fg=FG_DIM,
-                 font=("Segoe UI", 8), width=6, anchor="e").pack(side=tk.LEFT)
-        tk.Entry(ep_frame, textvariable=self.single_email_var, bg=BG_INPUT,
-                 fg=FG_MAIN, width=26, insertbackground=FG_MAIN,
-                 font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(3, 6))
-
-        tk.Label(ep_frame, text="Pass:", bg=BG_PANEL, fg=FG_DIM,
-                 font=("Segoe UI", 8), width=5, anchor="e").pack(side=tk.LEFT)
-        tk.Entry(ep_frame, textvariable=self.single_pass_var, bg=BG_INPUT,
-                 fg=FG_MAIN, width=14, insertbackground=FG_MAIN,
-                 font=("Segoe UI", 8), show="\u2022").pack(side=tk.LEFT, padx=(3, 0))
+        # ═══ Section: Proxy (Global Widget) — replaces old WebShare-only code ═══
+        from gui.proxy import build_proxy_widget
+        self.proxy_vars = build_proxy_widget(settings, row_offset=20)
 
     def _browse_accounts(self):
         from tkinter import filedialog
@@ -1661,3 +1616,120 @@ class WaveSpeedTab(BaseFarmTab, HorizontalLayoutMixin):
             except Exception:
                 pass
             self._refresh_job_id = None
+
+
+# ════════════════════════════════════════════════════
+# 7. Genspark Farm
+# ════════════════════════════════════════════════════
+
+class GensparkTab(BaseFarmTab, HorizontalLayoutMixin):
+    """Genspark Farm — Bulk API key extraction via Google OAuth + sidebar Settings."""
+
+    TAB_TITLE = "Genspark Farm"
+    TAB_DESCRIPTION = "Bulk Genspark API key farm via Google OAuth login"
+    FARM_SCRIPT = "genspark_farm.py"
+    RESULTS_KEY = "genspark"
+    RESULT_COLS = ("email", "api_key", "status")
+    RESULT_COL_WIDTHS = {"email": 240, "api_key": 280, "status": 120}
+    SUPPORTS_COUNT_CONCURRENCY = True
+
+    def _build_ui(self):
+        self._build_horizontal_ui()
+
+    def _build_settings(self, settings):
+        sec1 = tk.LabelFrame(settings, text="  \U0001f4c1  ACCOUNTS SOURCE  ", bg=BG_PANEL,
+                              fg=ACCENT, font=("Segoe UI", 8, "bold"),
+                              labelanchor="w", padx=8, pady=5)
+        sec1.grid(row=10, column=0, columnspan=5, sticky="we", pady=(8, 3))
+
+        f_row = tk.Frame(sec1, bg=BG_PANEL)
+        f_row.pack(fill=tk.X, pady=(0, 2))
+
+        tk.Label(f_row, text="File:", bg=BG_PANEL, fg=FG_DIM,
+                 font=("Segoe UI", 8)).pack(side=tk.LEFT)
+
+        default_accounts = os.path.join(FARM_DIR, "data", "genspark",
+                                        "genspark_accounts.txt")
+
+        self.accounts_file_var = tk.StringVar(value=default_accounts)
+        tk.Entry(f_row, textvariable=self.accounts_file_var, bg=BG_INPUT,
+                 fg=FG_MAIN, width=30, insertbackground=FG_MAIN,
+                 font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(4, 4), fill=tk.X, expand=True)
+
+        tk.Button(f_row, text="Browse...", bg=ACCENT, fg="#1e1e2e",
+                  font=("Segoe UI", 7), relief=tk.FLAT, padx=6, cursor="hand2",
+                  command=self._browse_accounts).pack(side=tk.LEFT)
+
+        self.account_count_var = tk.StringVar(value="\u23f3 Loading...")
+        tk.Label(sec1, textvariable=self.account_count_var, bg=BG_PANEL,
+                 fg=ACCENT_YELLOW, font=("Segoe UI", 8)).pack(anchor="w", pady=(3, 0))
+
+        self.accounts_file_var.trace_add("write", self._on_file_path_changed)
+
+        # Single account mode vars
+        self.use_single_var = tk.BooleanVar(value=False)
+        self.single_email_var = tk.StringVar()
+        self.single_pass_var = tk.StringVar()
+
+        from gui.proxy import build_proxy_widget
+        self.proxy_vars = build_proxy_widget(settings, row_offset=20)
+
+    def _browse_accounts(self):
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            title="Select GSuite Accounts File",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            initialdir=FARM_DIR,
+        )
+        if path:
+            self.accounts_file_var.set(path)
+            self._auto_detect_count()
+
+    def _on_single_toggle(self):
+        pass
+
+    def _build_args(self):
+        args = []
+        if self.use_single_var.get():
+            email = self.single_email_var.get().strip()
+            pw = self.single_pass_var.get().strip()
+            if email and pw:
+                args.extend(["--email", email, "--pass", pw])
+            else:
+                args.extend(["--accounts-file", self.accounts_file_var.get().strip()])
+        else:
+            args.extend(["--accounts-file", self.accounts_file_var.get().strip()])
+
+        from gui.proxy import get_proxy_args
+        proxy_args = get_proxy_args(self.proxy_vars)
+        if proxy_args:
+            args.extend(proxy_args)
+        return args
+
+    def _auto_detect_count(self):
+        path = self.accounts_file_var.get().strip()
+        count_label = getattr(self, "account_count_var", None)
+        if not path or not os.path.isfile(path):
+            if count_label:
+                count_label.set("\u26a0 File not found")
+            return
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                lines = [l.strip() for l in f if l.strip() and "|" in l]
+            total = len(lines)
+            if count_label:
+                count_label.set(f"\U0001f4c4 {total} accounts")
+            if total > 0:
+                self.count_var.set(str(total))
+        except Exception:
+            if count_label:
+                count_label.set("\u26a0 Error reading file")
+
+    def _on_file_path_changed(self, *_):
+        if hasattr(self, "_count_debounce_id"):
+            self.after_cancel(self._count_debounce_id)
+        self._count_debounce_id = self.after(500, self._auto_detect_count)
+
+    def _post_init(self):
+        self.count_var.set("5")
+        self._auto_detect_count()

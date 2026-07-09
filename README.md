@@ -11,6 +11,9 @@ Bulk-register accounts and harvest free API keys across multiple AI providers. E
 | **WaveSpeed.ai** | Variable | **Nodriver only** (CF bypass) | ✅ v31 |
 | **Mistral AI** | Variable | Playwright/Patchright | ✅ |
 | **Xiaomi** | Variable | Playwright/Patchright | ✅ |
+| **Genspark** | `gsk-*` keys | Nodriver (Google OAuth) | 🆕 New |
+| **IAMHC** (`api.iamhc.cn`) | Variable | Nodriver | 🆕 New |
+| **AutoClaw** (Z.ai) | Session tokens | CloakBrowser + Flask proxy | 🆕 New |
 
 ## Architecture
 
@@ -22,12 +25,13 @@ alibaba-cloud-farm/
 │   ├── config.py            # .env loader & defaults
 │   ├── email_providers.py   # IMAP OTP reading (Gmail, Outlook, custom)
 │   ├── helpers.py           # Utilities (humanizer, delays, retry)
-│   └── registry.py          # Farm registry / discovery
+│   └── registry.py          # 🆕 Farm tab registry (auto-discover tabs for GUI)
 ├── farms/                   # Farm implementations
 ├── gui/                     # CustomTkinter GUI app
 │   ├── app.py               # Main window
 │   ├── base_tab.py          # Base tab class
-│   └── tabs.py              # Per-provider tabs
+│   ├── tabs.py              # Per-provider tabs
+│   └── proxy.py             # 🆕 Global proxy widget (WebShare format, per-browser rotation)
 ├── utils/                   # Shared utilities
 │   ├── humanizer.py         # Text/behavior humanization
 │   └── proxy_manager.py     # Proxy rotation
@@ -39,10 +43,17 @@ alibaba-cloud-farm/
 ├── alibaba_register.py      # Alibaba account registration
 ├── xiaomi_farm.py           # Xiaomi farm
 ├── xiaomi_register.py       # Xiaomi account registration
+├── genspark_farm.py         # 🆕 Genspark farm (Google OAuth → API key extraction)
+├── genspark_discover_models.py # 🆕 Genspark model discovery
+├── genspark_model_ids.py    # 🆕 Genspark model ID reference
+├── genspark_model_selector.py # 🆕 Genspark model selector UI
+├── iamhc_farm.py            # 🆕 IAMHC farm (api.iamhc.cn registration)
+├── autoclaw_wrapper.py      # 🆕 AutoClaw bridge (GUI → autoclaw-autologin subprocess)
 ├── email_farm.py            # Email/alias management
 ├── farm.py                  # CLI entry point (headless)
 ├── farm_gui.py              # GUI entry point
 ├── farm_headless.py         # Headless batch mode
+├── data_paths.py            # 🆕 Central data path definitions for all tabs
 ├── config/config_solver.json# Solver preferences
 ├── .env                     # Credentials (gitignored!)
 └── data/                    # Results (gitignored!)
@@ -122,6 +133,30 @@ python mistral_farm.py --gmail user@gmail.com --apppass xxxx --count 5
 python xiaomi_farm.py --email user@domain.com --pass PASSWORD --show
 ```
 
+### Genspark Farm (🆕)
+
+```bash
+# Single account
+python genspark_farm.py --email user@domain.com --pass PASSWORD --show
+
+# Multiple accounts from file (format: email|password per line)
+python genspark_farm.py --accounts-file accounts.txt --count 10 --show
+```
+
+**Flow:** Homepage → sidebar → Sign In → Google OAuth → email → password → redirect → Settings → API Keys → Create New Key → extract `gsk-*` key.
+
+### IAMHC Farm (🆕)
+
+```bash
+# Using email list (each email must be unique — no alias/dot trick)
+python iamhc_farm.py --email-list accounts.txt --count 10
+
+# Single email with IMAP OTP
+python iamhc_farm.py --gmail-user user@gmail.com --app-pass 'xxxx xxxx xxxx xxxx' --count 5
+```
+
+> ⚠️ IAMHC blocks Gmail dot-trick and plus addressing. Each registration requires a unique email address.
+
 ## GUI
 
 ```bash
@@ -133,6 +168,8 @@ CustomTkinter desktop app with tabs for each provider. Features:
 - Per-account status tracking
 - Start/Stop/Pause controls
 - Batch processing with configurable concurrency
+- 🆕 Global proxy system (WebShare format, per-browser rotation)
+- 🆕 Auto-discover tabs via `core/registry.py`
 
 ## Config Reference
 
@@ -186,6 +223,9 @@ Each provider saves results to its own JSON file under `data/<provider>/`:
 | `data/wavespeed/wavespeed_results.json` | WaveSpeed |
 | `data/mistral/` | Mistral AI |
 | `data/xiaomi/` | Xiaomi |
+| `data/genspark/genspark_results.json` | 🆕 Genspark (`gsk-*` keys) |
+| `data/iamhc/` | 🆕 IAMHC |
+| `data/autoclaw/autoclaw_results.json` | 🆕 AutoClaw |
 
 > All `data/` files are **gitignored** — never committed.
 
@@ -196,6 +236,22 @@ Each provider saves results to its own JSON file under `data/<provider>/`:
 - **OTP extraction** uses regex on `<span>` tags, not CSS color codes (more reliable).
 - **No proxy needed** for most providers — direct IP works.
 - **Domain restriction**: Some providers (e.g., WaveSpeed) may restrict certain email domains.
+- **IAMHC alias restriction**: `api.iamhc.cn` blocks Gmail dot-trick and plus addressing — unique emails required.
+- **AutoClaw** uses a local Flask proxy server (port 31000) to intercept OAuth tokens from Z.ai. Requires `autoclaw/` project alongside.
+
+## Proxy System (🆕)
+
+Global proxy support across all farms — load WebShare residential proxies and rotate per-browser.
+
+```bash
+# In farm CLI:
+python wavespeed_farm.py --proxy http://user:pass@host:port --email user@domain.com --pass PASSWORD --show
+python siliconflow_farm.py --proxy http://user:pass@host:port --accounts-file accounts.txt --count 10
+```
+
+GUI: Each tab has a "Proxy" section — load a proxy list file, and proxies rotate automatically per account.
+
+**Format:** `host:port:user:pass` per line (WebShare format).
 
 ## Security
 

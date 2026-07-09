@@ -68,11 +68,37 @@ smtp*/
 _backup*/
 _test*.py
 _temp*/
+*_test*.py
+*_probe*.py
+*_capture*.py
+*_connection*.py
 anchor_response.html
 TASK_STATE.md
 *.tmp
 *.swp
 *.swo
+
+# ════════════════════════════════════════
+# AutoClaw project (contains proxy creds, tokens, accounts)
+# ════════════════════════════════════════
+autoclaw/
+
+# ════════════════════════════════════════
+# Proxy lists (contain user:pass credentials)
+# ════════════════════════════════════════
+proxy/
+proxy_list*.txt
+*proxy*.txt
+
+# ════════════════════════════════════════
+# Hermes plans (local dev only)
+# ════════════════════════════════════════
+.hermes/
+
+# ════════════════════════════════════════
+# Temp files
+# ════════════════════════════════════════
+tmp*.txt
 
 # ════════════════════════════════════════
 # IDE

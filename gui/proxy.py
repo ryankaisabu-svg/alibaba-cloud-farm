@@ -40,6 +40,8 @@ FG_MAIN = "#cdd6f4"
 FG_DIM = "#7f7f9f"
 ACCENT = "#89b4fa"
 ACCENT_GREEN = "#a6e3a1"
+ACCENT_RED = "#f38ba8"
+ACCENT_YELLOW = "#f9e2af"
 
 
 # ── Proxy Data ─────────────────────────────────────────

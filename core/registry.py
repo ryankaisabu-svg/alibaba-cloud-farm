@@ -130,6 +130,7 @@ class FarmRegistry:
             "MistralTab":     ("\U0001f3af", 50),
             "SiliconFlowTab": ("\U0001f916", 55),
             "WaveSpeedTab":   ("\U0001f30a", 56),
+            "GensparkTab":    ("\u2728", 57),
         }
 
         for class_name, (icon, order) in _TAB_META.items():

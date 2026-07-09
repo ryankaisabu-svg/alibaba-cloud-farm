@@ -49,6 +49,7 @@ TAB_DIRS = {
     "mistral":     os.path.join(DATA_DIR, "mistral"),
     "siliconflow": os.path.join(DATA_DIR, "siliconflow"),
     "wavespeed":   os.path.join(DATA_DIR, "wavespeed"),
+    "genspark":    os.path.join(DATA_DIR, "genspark"),
 }
 
 # ─ File definitions per tab ────────────────────────
@@ -80,6 +81,10 @@ TAB_FILES = {
     "wavespeed": {
         "results.json":  "wavespeed_results.json",
         "accounts.csv":  "wavespeed_accounts.csv",
+    },
+    "genspark": {
+        "results.json":  "genspark_results.json",
+        "accounts.csv":  "genspark_accounts.csv",
     },
 }
 
