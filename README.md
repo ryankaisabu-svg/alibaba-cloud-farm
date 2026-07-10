@@ -1,26 +1,56 @@
-# Kiro Token Harvester & Standalone DB Farm
+# ☁️ Alibaba Cloud Farm — Master GUI Architecture
 
-Sistem ini adalah modul interceptor kredensial yang beroperasi sepenuhnya secara headless/background. Sistem ini dirancang untuk "membajak" OAuth Token Entra ID langsung dari memori sistem sesaat setelah user berhasil login melalui **Kiro IDE**.
+Proyek ini adalah sebuah **Farm Automation Manager** tersentralisasi yang berfungsi mengendalikan, memanen, dan mengelola ratusan/ribuan akun Node AI dan komputasi awan. Seluruh antarmukanya dibangun menggunakan grafis visual dinamis berbasi Python (`Tkinter`/`ttk`) yang diatur ulang menggunakan Arsitektur Modular (Core Registry).
 
-Metode ini 100% melompati penggunaan web browser automation (Playwright/Puppeteer) untuk skrip farm.
+## 🧩 Arsitektur GUI Modular (`core.registry`)
+Dibuat untuk menghilangkan struktur hard-code/kaku, GUI ini memuat setiap aplikasinya secara dinamis menggunakan `FarmRegistry.auto_discover()`.
+- **`gui/app.py`**: Merupakan fondasi (Jendela Utama / *Master Window*) yang meluncurkan aplikasi layar penuh.
+- **`gui/tabs.py` & `gui/tabs/`**: Tempat seluruh kelas layout tiap penyedia platform (Provider/Farm) ditulis, diturunkan dari `BaseFarmTab`.
+- **`core/registry.py`**: Mengatur urutan penempatan (order) dan icon yang akan muncul pada menu bar Tab.
 
-## Alur Kerja (Arsitektur Polling & Upsert)
-1. **Interceptor (`kiro_harvester_standalone.py`)** berjalan sebagai daemon background memantau file cache AWS SSO (`C:\Users\Dhipa\.aws\sso\cache\kiro-auth-token.json`).
-2. Proses polling dilakukan dengan interval secepat **50 miliseconds** untuk memenangkan balapan (menghadang) fitur penghapusan diri (Self-Destruct) dari Kiro IDE.
-3. Kredensial JWT yang diserap segera diparse untuk mendapatkan profil Target Email.
-4. Kredensial di-push secara atomic ke sebuah master file database JSON.
+Jika suatu saat Anda butuh menambahkan platform baru, cukup buat *Class* Tab di dalam folder `gui` dan daftarkan di direktori _TAB_META pada class pendaftar.
 
-## Crash-Safe & Append (Upsert)
-Data yang tertangkap dimasukkan ke dalam:
-`E:\WEB\alibaba-cloud-farm\kiro_database_farm.json`
+---
 
-Sistem tidak akan mencetak baris yang double/tumpang tindih jika mendapatkan email yang sama keesokan harinya.
-- Akun baru = Menambahkan baris (Append di akhir).
-- Akun lama = Kredensial JWT-nya disuntik ulang / ditimpa dengan nilai terbaru.
+## 🗂️ Direktori Tab & Ekosistem
+Aplikasi ini melayani pengelolaan platform-platform multi-node paralel berikut:
 
-## Cara Penggunaan
-Aktifkan script secara manual dari terminal jika belum aktif di background:
-```bash
-python E:/WEB/alibaba-cloud-farm/kiro_harvester_standalone.py
-```
-Setelah skrip berjalan, silakan terus lakukan **Login Berantai (multi-akun)** di dalam aplikasi GUI Kiro IDE tanpa perlu menghiraukan skrip Python ini. Ia akan mengatur penampungan JWT-nya secara otomatis.
+1. 📱 **Xiaomi MiMo Farm**
+   Kendali kluster pengelolaan perolehan resource MiMo (Xiaomi). Mengotomasi perolehan token/sesi spesifik dari platform yang terhubung.
+2. 📧 **Email Farm**
+   Modul peternakan dan penampungan SMTP/Imap massif yang di-generate massal untuk operasional klon/akun.
+3. ☁️ **Alibaba Cloud Farm** *(Core)*
+   Sentral kendali instance dan pengelolaan token *Cloud-Resource* Alibaba yang melengkapi fondasi project ini.
+4. 🌐 **Qwen Cloud Farm**
+   Pengelola alokasi model/API *Qwen*, mengawasi node farm dalam memproses AI.
+5. 🎯 **Mistral AI Farm**
+   Pengelola resource provider AI dari sisi Mistral API/token farm.
+6. 🤖 **SiliconFlow Farm**
+   Menangani otomasi pembuatan dan pencatatan Key dari infrastruktur SiliconFlow model hosting.
+7. 🌊 **WaveSpeed Farm**
+   Subsistem otomatisasi bagi layanan komputasi instan dari WaveSpeed.
+8. ✨ **Genspark Farm**
+   Injeksi API dan farming model text/generation dari platform Genspark.
+9. 🔑 **Kiro Harvester Desktop** *(Add-on Standalone)*
+   Modul pencegat Token (Interceptor). Bergerak secara *background daemon* memanen (Harvest) Access Token OAuth2 milik Kiro IDE (Entra ID) sebelum API Kiro berhasil melancarkan *Self-Destruct*. Menambahkan update token secara atomik ke dalam `kiro_database_farm.json`.
+
+---
+
+## ⚙️ Kiro Token Harvester (Mekanisme Bypass)
+Khusus pada tab **Kiro Harvester**, ia beroperasi di balik layar (*headless interceptor*):
+- Berjalan dengan interval observasi mikro (50 milisecond).
+- Secanggih memata-matai cache di `C:\Users\...\.aws\sso\cache\kiro-auth-token.json`.
+- Mengekstrak JWT Token menggunakan dekripsi Base64, dan mengatur datanya secara *Crash-Safe Upsert* (menggunakan temp file dan `os.replace` atomik) agar baris konfigurasi tidak dobel melainkan di-*update*.
+
+## 🚀 Instalasi & Menjalankan
+1. Pastikan Anda punya Python versi `3.13` atau ke atas dengan pustaka terkait seperti *playwright*.
+2. Meluncurkan Aplikasi Utama (Rekomendasi Utama):
+   ```bash
+   run_farm_gui.bat
+   ```
+3. Meluncurkan dari GUI lama (Opsional / Legacy):
+   ```bash
+   run_qwen_gui.bat
+   ```
+
+*Semua kunci kredensial atau output dari tab-tab ini diawasi aman oleh `.gitignore` berlapis (tidak akan terkirim ke riwayat Github).*
