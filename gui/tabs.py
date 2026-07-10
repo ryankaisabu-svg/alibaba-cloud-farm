@@ -1733,3 +1733,68 @@ class GensparkTab(BaseFarmTab, HorizontalLayoutMixin):
     def _post_init(self):
         self.count_var.set("5")
         self._auto_detect_count()
+
+
+# =======================================================
+# 🔑 Kiro Harvester Tab (Injeksi Eksternal)
+# =======================================================
+class KiroHarvesterTab(tk.Frame):
+    TAB_TITLE = "🔑 Kiro Harvester"
+    
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, bg="#1e1e2e", **kwargs)
+        self.harvester_process = None
+        self.script_path = r"E:\WEB\alibaba-cloud-farm\kiro_harvester_standalone.py"
+        self.db_path = r"E:\WEB\alibaba-cloud-farm\kiro_database_farm.json"
+        self._build_ui()
+        
+    def _build_ui(self):
+        # Header Info
+        header = tk.Label(self, text="🔑 Entra ID / Kiro Harvester Daemon", font=("Arial", 16, "bold"), bg="#1e1e2e", fg="#cdd6f4")
+        header.pack(pady=(20, 5))
+        
+        sub = tk.Label(self, text="Sistem mendengarkan sesi login dari App Kiro IDE dan memperbarui Database secara OTOMATIS.", bg="#1e1e2e", fg="#7f7f9f")
+        sub.pack(pady=(0, 20))
+        
+        # Btn Start Stop
+        self.btn_toggle = tk.Button(self, text="▶ START HARVESTER", command=self.toggle_daemon,
+                                  font=("Arial", 12, "bold"), bg="#a6e3a1", fg="black", padx=20, pady=5)
+        self.btn_toggle.pack(pady=10)
+        
+        self.lbl_status = tk.Label(self, text="🔴 STATUS: MATI (OFF)", bg="#1e1e2e", fg="#f38ba8", font=("Arial", 10, "bold"))
+        self.lbl_status.pack()
+        
+        # Console output
+        console_frame = tk.LabelFrame(self, text="Live Monitor", bg="#2a2a3c", fg="#a6e3a1")
+        console_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        self.txt_console = tk.Text(console_frame, height=15, bg="#1e1e1e", fg="#cdd6f4", font=("Consolas", 10))
+        self.txt_console.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.txt_console.insert(tk.END, "[*] Cukup Klik Start. Lalu Lakukan Login / Switch Akun pada Kiro IDE tanpa batas.\n")
+        self.txt_console.insert(tk.END, "[*] Pantau Tab ini untuk melihat ekstrak email & JWT secara Real-time.\n\n")
+        
+    def toggle_daemon(self):
+        import subprocess
+        import sys
+        if self.harvester_process is None:
+            self.txt_console.insert(tk.END, "\n[🚀] MENGHIDUPKAN BACKGROUND DAEMON PADA 50 MILISECOND POLLING...\n")
+            self.txt_console.see(tk.END)
+            try:
+                self.harvester_process = subprocess.Popen(
+                    [sys.executable, self.script_path],
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                )
+                self.btn_toggle.config(text="■ STOP HARVESTER", bg="#f38ba8")
+                self.lbl_status.config(text="🟢 STATUS: AKTIF (MENUNGGU SESSION INTERCEPT)", fg="#a6e3a1")
+            except Exception as e:
+                self.txt_console.insert(tk.END, f"[-] ERROR: {e}\n")
+        else:
+            try:
+                self.harvester_process.terminate()
+            except:
+                pass
+            self.harvester_process = None
+            self.btn_toggle.config(text="▶ START HARVESTER", bg="#a6e3a1")
+            self.lbl_status.config(text="🔴 STATUS: MATI (OFF)", fg="#f38ba8")
+            self.txt_console.insert(tk.END, "\n[🛑] DAEMON DIMATIKAN OLEH USER.\n")
+            self.txt_console.see(tk.END)

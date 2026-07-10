@@ -105,14 +105,6 @@ class FarmRegistry:
 
     @classmethod
     def auto_discover(cls) -> "FarmRegistry":
-        """Auto-discover and register all tab classes from gui.tabs.
-
-        Uses TAB_TITLE as label and a default icon from _REGISTRY_ICON
-        class attribute (or a per-class default).
-
-        Returns:
-            FarmRegistry with all 5 tabs registered.
-        """
         registry = cls()
 
         try:
@@ -120,6 +112,40 @@ class FarmRegistry:
         except ImportError as e:
             logger.error("Cannot import gui.tabs for auto-discovery: %s", e)
             return registry
+
+        # Tab class name -> (icon, order) mapping
+        _TAB_META = {
+            "XiaomiTab":      ("📱", 10),
+            "EmailFarmTab":   ("📧", 20),
+            "AlibabaTab":     ("☁", 30),
+            "QwenCloudTab":   ("🌐", 40),
+            "MistralTab":     ("🎯", 50),
+            "SiliconFlowTab": ("🤖", 55),
+            "WaveSpeedTab":   ("🌊", 56),
+            "GensparkTab":    ("✨", 57),
+            "KiroHarvesterTab":("🔑", 60),
+        }
+
+        for class_name, (icon, order) in _TAB_META.items():
+            tab_cls = getattr(tabs_mod, class_name, None)
+            if tab_cls is None:
+                logger.warning("Tab class %s not found in gui.tabs", class_name)
+                continue
+
+            # Use TAB_TITLE as label, strip " Farm" suffix for tab bar
+            label = getattr(tab_cls, "TAB_TITLE", class_name)
+            if label.endswith(" Farm"):
+                label = label[: -len(" Farm")]
+
+            registry.register(
+                cls=tab_cls,
+                label=label,
+                icon=icon,
+                order=order,
+                enabled=True,
+            )
+
+        return registry
 
         # Tab class name -> (icon, order) mapping
         _TAB_META = {
@@ -153,6 +179,21 @@ class FarmRegistry:
                 enabled=True,
             )
 
+
+        # --- KIRO HARVESTER INJECT ---
+        try:
+            tab_kiro_cls = getattr(tabs_mod, "KiroHarvesterTab", None)
+            if tab_kiro_cls:
+                registry.register(
+                    cls=tab_kiro_cls,
+                    label="Kiro Harvester Desktop",
+                    icon="🔑",
+                    order=60,
+                    enabled=True,
+                )
+        except Exception:
+            pass
+        # -----------------------------
         return registry
 
     @classmethod

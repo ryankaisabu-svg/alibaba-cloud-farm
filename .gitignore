@@ -106,3 +106,10 @@ tmp*.txt
 .idea/
 .vscode/
 *.sublime-*
+
+
+# ════════════════════════════════════════
+# Kiro Harvester DB (Contains JWTs)
+# ════════════════════════════════════════
+kiro_database_farm*.json
+kiro-token-stolen*.json

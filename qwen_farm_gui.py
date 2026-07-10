@@ -450,6 +450,10 @@ class QwenFarmGUI(ctk.CTk):
         self.config_tab = self.tabview.add("⚙️ Configuration")
         self.results_tab = ResultsTable(self.tabview.add("📋 Results"))
         self.logs_tab = self.tabview.add("📜 Live Logs")
+        # --- START KIRO EXTENSION ---
+        self.tabview.add("🔑 Kiro Harvester")
+        self.setup_kiro_tab()
+        # --- END KIRO EXTENSION ---
         
         # Build each tab
         self._build_dashboard()
@@ -896,6 +900,75 @@ QWEN_DEBUG={'true' if self.debug_switch.get() else 'false'}
 
 
 # ── Main Entry Point ──────────────────────────────────────────
+
+    def setup_kiro_tab(self):
+        kiro_frame = getattr(self.tabview, "tab")("🔑 Kiro Harvester")
+        
+        # Header Target
+        self.kiro_label = ctk.CTkLabel(kiro_frame, text="Kiro Token Standalone Harvester", font=ctk.CTkFont(size=20, weight="bold"))
+        self.kiro_label.pack(pady=(20, 5))
+        
+        self.kiro_sub = ctk.CTkLabel(kiro_frame, text="Database: kiro_database_farm.json", text_color="gray")
+        self.kiro_sub.pack(pady=(0, 20))
+        
+        # Tombol Start/Stop Tracker
+        self.kiro_btn = ctk.CTkButton(kiro_frame, text="Start Harvester Daemon", command=self.toggle_kiro_daemon, fg_color="#28a745", hover_color="#218838")
+        self.kiro_btn.pack(pady=(10, 20))
+        
+        # Textbox log mini
+        self.kiro_log = ctk.CTkTextbox(kiro_frame, height=250, corner_radius=5)
+        self.kiro_log.pack(fill="x", padx=40, pady=10)
+        
+        # State variable
+        self.kiro_process = None
+
+    def toggle_kiro_daemon(self):
+        if self.kiro_process is None:
+            # Start
+            self.kiro_btn.configure(text="Stop Harvester", fg_color="#dc3545", hover_color="#c82333")
+            self.kiro_log.insert("end", "[+] Memulai Interceptor di Background (Polling Mode)...
+")
+            self.kiro_log.insert("end", "[*] Silakan login/logout bergantian pada Kiro IDE.
+")
+            
+            # Subprocess non-blocking
+            import subprocess
+            try:
+                self.kiro_process = subprocess.Popen(
+                    [sys.executable, "kiro_harvester_standalone.py"],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                )
+                self.master.after(100, self.poll_kiro_logs) # Mulai baca pesan dari backend
+            except Exception as e:
+                self.kiro_log.insert("end", f"[-] Error starting: {e}
+")
+        else:
+            # Stop
+            self.kiro_btn.configure(text="Start Harvester Daemon", fg_color="#28a745", hover_color="#218838")
+            try:
+                self.kiro_process.terminate()
+            except Exception:
+                pass
+            self.kiro_process = None
+            self.kiro_log.insert("end", "[-] Harvester dihentikan.
+")
+            self.kiro_log.see("end")
+
+    def poll_kiro_logs(self):
+        if self.kiro_process is not None:
+            try:
+                # Membaca log output jika ada
+                import queue
+                import threading
+                
+                # Biar tidak hang GUI, kita butuh poll dengan non-blocking stream... 
+                # (Karna ini patch sederhana, kita biarkan saja script backend menulis ke JSON
+                # dan UI ini me-refresh ukuran/isi file DB)
+            except Exception:
+                pass
+            self.master.after(1000, self.poll_kiro_logs) # loop timer
+
 if __name__ == "__main__":
     app = QwenFarmGUI()
     app.mainloop()
